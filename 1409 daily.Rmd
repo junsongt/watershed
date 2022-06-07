@@ -73,6 +73,18 @@ dailyFrame = function(data, impute=FALSE) {
 ```
 
 
+```{r, echo=TRUE}
+mod = function(a, n) {
+  if (a <= n) {
+    return (a)
+  } else {
+    return (mod(a-n, n))
+  }
+  
+}
+
+```
+
 
 #===============================================================================
 # Daily unimputed data
@@ -243,7 +255,7 @@ same_days = function(ts, dayNum) {
 
 
 ```{r, echo=TRUE}
-seasonality = function(ts, window, degree) {
+season1 = function(ts, window, degree) {
   # number of years
   k = floor(tsp(ts)[2]-tsp(ts)[1])+1
   freq = as.integer(tsp(ts)[3])
@@ -299,11 +311,8 @@ seasonality = function(ts, window, degree) {
   
 }
 
-
-
-
-#===============================================================================
-season = function(ts, window, degree) {
+#========================================================================================
+season2 = function(ts, window, degree) {
   # number of years
   k = floor(tsp(ts)[2]-tsp(ts)[1])+1
   freq = as.integer(tsp(ts)[3])
@@ -365,11 +374,150 @@ season = function(ts, window, degree) {
 
 
 
+
 ```{r, echo=TRUE}
-seas1 = seasonality(daily_train, window = 51, degree = 2)
+seasonality1 = function(ts, window, degree) {
+  # number of years
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
+  freq = as.integer(tsp(ts)[3])
+  
+  seasonality = NULL
+  
+  for (i in (1:freq)) {
+    centers = NULL
+    y = NULL
+    x = NULL
+    for (j in (1:k)) {
+      center = i+(j-1)*freq
+      
+      lb = max(center-window, 1)
+      ub = min(center+window, k*freq)
+      idx = seq(from=lb,to=ub,by=1)
+      normalize_idx = idx - center
+      x = c(x, normalize_idx)
+      y = c(y, ts[idx])
+      
+      centers = c(centers, center)
+    }
+    
+    # local regression
+    if (degree == 0) {
+      model = lm(y ~ 1)
+      yhat = as.numeric(model$fitted.values[which(x==0)])
+    }
+    if (degree == 1) {
+      model = lm(y ~ x)
+      yhat = as.numeric(model$fitted.values[which(x==0)])
+    }
+    if (degree == 2) {
+      model = lm(y ~ x+I(x^2))
+      yhat = as.numeric(model$fitted.values[which(x==0)])
+    }
+    if (degree == 3) {
+      model = lm(y ~ x+I(x^2)+I(x^3))
+      yhat = as.numeric(model$fitted.values[which(x==0)])
+    }
+    
+    # slot = same day index in the original series
+    # slots = seq(from=i,to=i+(k-1)*freq, by=freq)
+    seasonality[centers] = yhat
+  }
+  return (seasonality)
+}
+
+```
+
+
+```{r, echo=TRUE}
+seasonality2 = function(ts, window, degree) {
+  # number of years
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
+  freq = as.integer(tsp(ts)[3])
+  
+  seasonality = NULL
+  
+  for (i in (1:freq)) {
+    # [-w+i,..i,...w+i]
+    interval = seq(from=-window+i, to=window+i, by=1)
+    
+    y = NULL
+    x = NULL
+    
+    for (w in interval) {
+      indices = NULL
+      for (j in (0:k)) {
+        idx = w + j*freq
+        # check if valid index
+        if (1 <= idx && idx <= k*freq) {
+          indices = c(indices, idx)
+          # normalized interval center is always 0:[-w,...0,...w]
+          x = c(x, w-i)
+        }
+      }
+      
+      # same day cluster
+      cluster = ts[indices]
+      y = c(y, cluster)
+      
+    }
+    
+    if (degree == 0) {
+      model = lm(y ~ 1)
+      yhat = as.numeric(model$fitted.values[which(x==0)])
+    }
+    if (degree == 1) {
+      model = lm(y ~ x)
+      yhat = as.numeric(model$fitted.values[which(x==0)])
+    }
+    if (degree == 2) {
+      model = lm(y ~ x+I(x^2))
+      yhat = as.numeric(model$fitted.values[which(x==0)])
+    }
+    if (degree == 3) {
+      model = lm(y ~ x+I(x^2)+I(x^3))
+      yhat = as.numeric(model$fitted.values[which(x==0)])
+    }
+    
+    slots = seq(from=i, to=i+(k-1)*freq, by=freq)
+    seasonality[slots] = yhat
+  }
+  
+  return (seasonality)
+}
+
+```
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+s1 = seasonality1(daily_train, window = 51, degree = 2)
+plot(s1, type ="l")
+end_time = Sys.time()
+end_time - start_time
+
+```
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+s2 = seasonality2(daily_train, window = 51, degree = 2)
+plot(s2, type ="l")
+end_time = Sys.time()
+end_time - start_time
+
+```
+
+
+
+
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+seas1 = season1(daily_train, window = 51, degree = 2)
 plot(seas1, type ="l")
-seas2 = season(daily_train, window = 51, degree = 2)
-plot(seas2, type ="l")
+end_time = Sys.time()
+end_time - start_time
 
 
 # daily_ds = daily_train-seas
@@ -378,6 +526,15 @@ plot(seas2, type ="l")
 
 ```
 
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+seas2 = season2(daily_train, window = 51, degree = 2)
+plot(seas2, type ="l")
+end_time = Sys.time()
+end_time - start_time
+```
 
 <!-- # Classical Decomposition by moving average -->
 <!-- ```{r, echo=TRUE} -->

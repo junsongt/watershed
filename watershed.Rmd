@@ -26,7 +26,7 @@ path = "D:/NSERC/project/processedData/"
 fileNames = list.files(path)
 
 # load shapes
-shapes = vect("ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
+# shapes = vect("ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
 
 # coordinates
 gridInfo = read.csv(file.choose(), sep = ";")
@@ -204,10 +204,21 @@ plot_boundaries = function(shapes, map) {
 ```{r, echo=TRUE}
 # shape: a single shape file
 # long.lo, long.up, lat.lo, lat.up - lower and upper bounds on longitude and latitude;
+# 
 # strict: TRUE or FALSE for whether the shape is wholly inside the region or just partially inside;
 # Returns a boolean;
-inside_region = function(shape, long.lo, long.up, lat.lo, lat.up, strict) {
-  return (TRUE)
+inside_region = function(shape, long_min, long_max, lat_min, lat_max) {
+  longs = shape$Longitude
+  lats = shape$Latitude
+  strict = TRUE
+  i = 1
+  while (strict && i <= length(longs)) {
+    if (!(long_min <= longs[i] && longs[i] <= long_max && lat_min <= lats[i] && lats[i] <= lat_max)) {
+      strict = FALSE
+    }
+    i = i + 1
+  }
+  return (strict)
 }
 
 
@@ -219,7 +230,13 @@ inside_region = function(shape, long.lo, long.up, lat.lo, lat.up, strict) {
 # shapes: a list of shape files
 # Returns the index of the shape containing the longitude and latitude
 region = function(shapes, long, lat) {
-  return (NULL)
+  indices = NULL
+  for (i in (1:length(shapes))) {
+    if (point_in_polygon(shapes[i], long, lat)) {
+      indices = c(indices, i)
+    }
+  }
+  return (indices)
 }
 
 
@@ -234,8 +251,27 @@ region = function(shapes, long, lat) {
 # Returns the snow fraction, i.e., total snow / (total rain + total snow).
 # Any time with missing rain or snow or both is ignored.
 
+
+# mts is usually a data frame with col:
+# Time snow_mat rain_mat
 snow_fraction = function(mts) {
-  return (0)
+  snow = mts$snow_mat
+  rain = mts$rain_mat
+  snow_sum = 0
+  rain_sum = 0
+  # assume that snow & rain matrices have same dimensions
+  for (r in (1:nrow(snow))) {
+    for (c in (1:length(snow[1,]))) {
+      # NA issue
+      if (!is.na(snow[r,c]) && !is.na(rain[r,c])) {
+        snow_sum = snow_sum + snow[r,c]
+        rain_sum = rain_sum + rain[r,c]
+      }
+      
+    }
+  }
+  snow_ratio = snow_sum / (snow_sum + rain_sum)
+  return (snow_ratio)
 }
 
 
@@ -254,14 +290,33 @@ precip_ratio = function(index) {
   for (i in index) {
     suffix = fileNames[i]
     datafile = mget(load(paste0(path, suffix)))
+    
+    # snow_ratio = snow_fraction(datafile)
+    # rain_ratio = rain_fraction(datafile)
+    
+    snow = datafile$snow_mat
+    rain = datafile$rain_mat
+    
+    snow_sum = 0
+    rain_sum = 0
+    # assume that snow & rain matrices have same dimensions
+    for (r in (1:nrow(snow))) {
+      for (c in (1:length(snow[1,]))) {
+        # NA issue
+        if (!is.na(snow[r,c]) && !is.na(rain[r,c])) {
+          snow_sum = snow_sum + snow[r,c]
+          rain_sum = rain_sum + rain[r,c]
+        }
+        
+      }
+    }
 
-    snow_ratio = SUM(datafile$snow_mat) / (SUM(datafile$rain_mat) + SUM(datafile$snow_mat))
-    rain_ratio = SUM(datafile$rain_mat) / (SUM(datafile$rain_mat) + SUM(datafile$snow_mat))
+    snow_ratio = snow_sum / (snow_sum + rain_sum)
+    rain_ratio = rain_sum / (snow_sum + rain_sum)
     snow_ratios = c(snow_ratios, snow_ratio)
     rain_ratios = c(rain_ratios, rain_ratio)
     watershed = c(watershed, suffix)
   }
-  
   return (data.frame(watershed, snow_ratios, rain_ratios))
 }
 

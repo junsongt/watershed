@@ -73,20 +73,8 @@ dailyFrame = function(data, impute=FALSE) {
 ```
 
 
-```{r, echo=TRUE}
-mod = function(a, n) {
-  if (a <= n) {
-    return (a)
-  } else {
-    return (mod(a-n, n))
-  }
-  
-}
 
-```
-
-
-#===============================================================================
+#========================================================================================
 # Daily unimputed data
 ```{r, echo=TRUE}
 daily = dailyFrame(resp_mat)
@@ -118,7 +106,7 @@ lines(daily_test, col="blue")
 
 
 
-
+#========================================================================================
 # Loess decomposition
 ```{r, echo=TRUE}
 # loess = stlplus(daily_train, s.window = "periodic", s.degree = 2)
@@ -149,7 +137,7 @@ pacf(error)
 ```
 
 
-#seasonal adjustment
+# post-smoothing of seasonal
 ```{r, echo=TRUE}
 rough_seasonal = seasonal(loess)
 plot(rough_seasonal, type="l")
@@ -213,7 +201,7 @@ lines(rough_seasonal, col="green")
 
 ```
 
-
+# re-fit on residuals
 ```{r, echo=TRUE}
 res = daily_train-loess$time.series[,"trend"]-ts(new_seas, start=c(1980,1), frequency = 365)
 acf(res, lag.max = 365*10)
@@ -228,6 +216,24 @@ tsdiag(model)
 ```
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# subseting function
 ```{r, echo=TRUE}
 # subseting clusters of ts values at given set of certain days within a period
 same_days = function(ts, dayNum) {
@@ -254,7 +260,12 @@ same_days = function(ts, dayNum) {
 
 
 
+#========================================================================================
+# Seasonality
+
+# 1st version
 ```{r, echo=TRUE}
+# (1) fit model to every member of same day class, then take expectation of fitted values at interval center 
 season1 = function(ts, window, degree) {
   # number of years
   k = floor(tsp(ts)[2]-tsp(ts)[1])+1
@@ -312,6 +323,7 @@ season1 = function(ts, window, degree) {
 }
 
 #========================================================================================
+# (2) collect all y at same day, take expectation of each cluster(y), fit a model, and take fitted values at interval center.
 season2 = function(ts, window, degree) {
   # number of years
   k = floor(tsp(ts)[2]-tsp(ts)[1])+1
@@ -373,8 +385,8 @@ season2 = function(ts, window, degree) {
 
 
 
-
-
+# 2nd version
+# (1) x = (-2,-1,0,1,2,-2,-1,0,1,2,...); y = ($,$,$,$,$,&,&,&,&,&,...) horizontal then vertical
 ```{r, echo=TRUE}
 seasonality1 = function(ts, window, degree) {
   # number of years
@@ -395,6 +407,7 @@ seasonality1 = function(ts, window, degree) {
       idx = seq(from=lb,to=ub,by=1)
       normalize_idx = idx - center
       x = c(x, normalize_idx)
+      # NA for y at idx does not matter
       y = c(y, ts[idx])
       
       centers = c(centers, center)
@@ -426,8 +439,8 @@ seasonality1 = function(ts, window, degree) {
 }
 
 ```
-
-
+# (2) x = (-2,-2,-2,...,-1,-1,-1,...,0,0,0,...,1,1,1,...,2,2,2,...); 
+# y = ($,&,#,...,$,&,#,...,$,&,#,...,$,&,#,...,$,&,#,...,), vertical then horizontal
 ```{r, echo=TRUE}
 seasonality2 = function(ts, window, degree) {
   # number of years
@@ -445,8 +458,8 @@ seasonality2 = function(ts, window, degree) {
     
     for (w in interval) {
       indices = NULL
-      for (j in (0:k)) {
-        idx = w + j*freq
+      for (j in (1:k)) {
+        idx = w + (j-1)*freq
         # check if valid index
         if (1 <= idx && idx <= k*freq) {
           indices = c(indices, idx)
@@ -456,6 +469,7 @@ seasonality2 = function(ts, window, degree) {
       }
       
       # same day cluster
+      # NA for y at idx does not matter
       cluster = ts[indices]
       y = c(y, cluster)
       
@@ -487,10 +501,10 @@ seasonality2 = function(ts, window, degree) {
 
 ```
 
-
+# test using 2nd version
 ```{r, echo=TRUE}
 start_time = Sys.time()
-s1 = seasonality1(daily_train, window = 51, degree = 2)
+s1 = seasonality1(daily_ts, window = 51, degree = 2)
 plot(s1, type ="l")
 end_time = Sys.time()
 end_time - start_time
@@ -500,7 +514,7 @@ end_time - start_time
 
 ```{r, echo=TRUE}
 start_time = Sys.time()
-s2 = seasonality2(daily_train, window = 51, degree = 2)
+s2 = seasonality2(daily_ts, window = 51, degree = 2)
 plot(s2, type ="l")
 end_time = Sys.time()
 end_time - start_time
@@ -511,7 +525,7 @@ end_time - start_time
 
 
 
-
+# test using 1st version
 ```{r, echo=TRUE}
 start_time = Sys.time()
 seas1 = season1(daily_train, window = 51, degree = 2)
@@ -536,6 +550,11 @@ end_time = Sys.time()
 end_time - start_time
 ```
 
+
+
+
+#========================================================================================
+# Model Fitting
 <!-- # Classical Decomposition by moving average -->
 <!-- ```{r, echo=TRUE} -->
 <!-- component = decompose(daily_train, type = "additive", filter = c()) -->
@@ -559,20 +578,7 @@ qqline(arima_model$residuals)
 ```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Box-Jenkins Forecast Method
+# Box-Jenkins Forecast Method Function
 ```{r, echo=TRUE}
 box_jenkins = function(model, ahead) {
   n = length(model$coef)
@@ -622,6 +628,22 @@ lines(pred2, col="red")
 
 
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -700,8 +722,6 @@ lines(daily_test, col="red")
 
 
 ```
-
-
 
 
 # model 2 & forecast 2

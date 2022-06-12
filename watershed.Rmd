@@ -15,6 +15,8 @@ library(tseries)
 library(xts)
 library(zoo)
 library(forecast)
+library(sp)
+library(sf)
 ```
 
 
@@ -203,8 +205,7 @@ plot_boundaries = function(shapes, map) {
 # inside region?
 ```{r, echo=TRUE}
 # shape: a single shape file
-# long.lo, long.up, lat.lo, lat.up - lower and upper bounds on longitude and latitude;
-# 
+# long_min, long_max, lat_min, lat_max: lower and upper bounds on longitude and latitude;
 # strict: TRUE or FALSE for whether the shape is wholly inside the region or just partially inside;
 # Returns a boolean;
 inside_region = function(shape, long_min, long_max, lat_min, lat_max) {
@@ -277,7 +278,28 @@ snow_fraction = function(mts) {
 
 ```
 
+# rain fraction
+```{r, echo=TRUE}
+rain_fraction = function(mts) {
+  snow = mts$snow_mat
+  rain = mts$rain_mat
+  snow_sum = 0
+  rain_sum = 0
+  # assume that snow & rain matrices have same dimensions
+  for (r in (1:nrow(snow))) {
+    for (c in (1:length(snow[1,]))) {
+      # NA issue
+      if (!is.na(snow[r,c]) && !is.na(rain[r,c])) {
+        snow_sum = snow_sum + snow[r,c]
+        rain_sum = rain_sum + rain[r,c]
+      }
+    }
+  }
+  rain_ratio = rain_sum / (snow_sum + rain_sum)
+  return (rain_ratio)
+}
 
+```
 
 # precipitation ratio
 ```{r, echo=TRUE}

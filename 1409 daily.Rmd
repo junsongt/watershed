@@ -629,7 +629,6 @@ end_time - start_time
 ```{r, echo=TRUE}
 start_time = Sys.time()
 s2 = seasonality2(daily_ts, window = 51, degree = 2)
-plot(s2, type ="l", xlim = c(0,1000))
 end_time = Sys.time()
 end_time - start_time
 
@@ -639,11 +638,68 @@ end_time - start_time
 ```{r, echo=TRUE}
 start_time = Sys.time()
 s3 = seasonality3(daily_ts, window = 51, degree = 2)
-plot(s3, type ="l", xlim = c(0,1000))
 end_time = Sys.time()
 end_time - start_time
 
 ```
+
+
+
+# Cross validation
+```{r, echo=TRUE}
+bestSeason = function(ts, window.max = 10) {
+  start_year = tsp(ts)[1]
+  end_year = tsp(ts)[2]
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
+  freq = as.integer(tsp(ts)[3])
+  minSMSR = Inf
+  best_window = 0
+  best_degree = 0
+  for (w in (0:window.max)) {
+    for (d in (0:3)) {
+      # sum of mean squared error over CVs
+      SMSR = 0
+      # run k times CV
+      for (year in (1:k)) {
+        test_index = seq(from=1+(year-1)*freq, to=year*freq, by=1)
+        test = ts[test_index]
+        # test must be converted into ts object!!!
+        test = ts(test, start=c(start_year+(year-1), 1), frequency = freq)
+        train = ts[-test_index]
+        # train must be converted into ts object!!!
+        train = ts(train, start=c(start_year, 1), frequency = freq)
+        seasonality = seasonality1(train, w, d)
+        pred = seasonality[1:freq]
+        residual = (test - pred)
+        SMSR = SMSR + mean(residual^2, na.rm = TRUE)
+      }
+      
+      if (SMSR < minSMSR) {
+        best_window = w
+        best_degree = d
+        minSMSR = SMSR
+      }
+    }
+  }
+  
+  return (data.frame(best_window, best_degree))
+}
+
+```
+
+
+```{r, echo=TRUE}
+# long runtime!!!
+bestSeason(daily_ts)
+
+```
+
+
+
+
+
+
+
 
 
 ```{r, echo=TRUE}
@@ -669,34 +725,6 @@ plot(remain_loess)
 
 
 
-
-
-
-
-# test using 1st version
-```{r, echo=TRUE}
-start_time = Sys.time()
-seas1 = season1(daily_train, window = 51, degree = 2)
-plot(seas1, type ="l")
-end_time = Sys.time()
-end_time - start_time
-
-
-# daily_ds = daily_train-seas
-# decomp = stl(daily_ds, s.window = "periodic")
-# plot(decomp)
-
-```
-
-
-
-```{r, echo=TRUE}
-start_time = Sys.time()
-seas2 = season2(daily_train, window = 51, degree = 2)
-plot(seas2, type ="l")
-end_time = Sys.time()
-end_time - start_time
-```
 
 
 

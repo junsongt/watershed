@@ -557,7 +557,7 @@ seasonality3 = function(ts, window, degree) {
       cluster = cluster[!is.na(cluster)]
       # set quantile & subset cluster without outlier  and subset x accordingly s.t same_x, cluster have same length
       # range is a vector: c(lb, ub)
-      range = quantile(cluster, prob = c(0.05, 0.95))
+      range = quantile(cluster, prob = c(0.25, 0.75))
       lb = as.numeric(range[1])
       ub = as.numeric(range[2])
       cluster = cluster[lb<=cluster&cluster<=ub]
@@ -596,12 +596,132 @@ seasonality3 = function(ts, window, degree) {
 
 
 
+(4)
+# re-arrange the raw time series into same day equivalent classes
+```{r, echo=TRUE}
+same_day_format = function(ts) {
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
+  freq = as.integer(tsp(ts)[3])
+  
+  M = list()
+  for (i in (1:freq)) {
+    indices = seq(from=i, to=i+(k-1)*freq, by=freq)
+    row = ts[indices]
+    M[[i]] = row
+  }
+  return (M)
+}
+
+```
+
+
+#run time check
+```{r, echo=TRUE}
+start_time = Sys.time()
+m = same_day_format(daily_ts)
+end_time = Sys.time()
+end_time - start_time
+
+
+```
+```{r, echo=TRUE}
+seasonality4 = function(ts, window, degree) {
+
+  # number of years
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
+  freq = as.integer(tsp(ts)[3])
+  
+  equi_class = same_day_format(ts)
+  n = length(equi_class[[1]])
+  
+  seasonality = NULL
+  for (i in (1:freq)) {
+    # [-w+i,..i,...w+i]
+    interval = seq(from=-window+i, to=window+i, by=1)
+    y = NULL
+    x = NULL
+    for (w in interval) {
+      if (w < 1) {
+        cluster = (equi_class[[w+freq]])[-n]
+      }
+      else if (w > freq) {
+        cluster = (equi_class[[w-freq]])[-1]
+      }
+      else {
+        cluster = equi_class[[w]]
+      }
+      
+      cluster = cluster[!is.na(cluster)]
+      
+      range = quantile(cluster, prob = c(0.25, 0.75))
+      lb = as.numeric(range[1])
+      ub = as.numeric(range[2])
+      cluster = cluster[lb<=cluster&cluster<=ub]
+      
+      y = c(y, cluster)
+      x = c(x, rep(w-i, length(cluster)))
+    }
+    
+    if (degree == 0) {
+      model = lm(y ~ 1)
+      yhat = as.numeric(model$fitted.values[which(x==0)][1])
+    }
+    if (degree == 1) {
+      model = lm(y ~ x)
+      yhat = as.numeric(model$fitted.values[which(x==0)][1])
+    }
+    if (degree == 2) {
+      model = lm(y ~ x+I(x^2))
+      yhat = as.numeric(model$fitted.values[which(x==0)][1])
+    }
+    if (degree == 3) {
+      model = lm(y ~ x+I(x^2)+I(x^3))
+      yhat = as.numeric(model$fitted.values[which(x==0)][1])
+    }
+    
+    slots = seq(from=i, to=i+(k-1)*freq, by=freq)
+    seasonality[slots] = yhat
+  }
+  
+  return (seasonality)
+}
+
+
+
+```
+
+
+
+
+# runtime for method 4
+```{r, echo=TRUE}
+start_time = Sys.time()
+s4 = seasonality4(daily_ts, window = 51, degree = 2)
+end_time = Sys.time()
+end_time - start_time
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # test using 2nd version
 ```{r, echo=TRUE}
 start_time = Sys.time()
 s1 = seasonality1(daily_ts, window = 51, degree = 2)
 s2 = seasonality2(daily_ts, window = 51, degree = 2)
 s3 = seasonality3(daily_ts, window = 51, degree = 2)
+s4 = seasonality4(daily_ts, window = 51, degree = 2)
 end_time = Sys.time()
 end_time - start_time
 
@@ -612,7 +732,8 @@ end_time - start_time
 ```{r, echo=TRUE}
 plot(s1, type ="l", xlim = c(0,1000), col = "black")
 lines(s2, type ="l", xlim = c(0,1000), col = "red")
-# lines(s3, type ="l", xlim = c(0,1000), col = "green")
+lines(s3, type ="l", xlim = c(0,1000), col = "blue")
+lines(s4, type = "l", xlim = c(0,1000), col = "green")
 ```
 
 
@@ -668,7 +789,7 @@ bestSeason = function(ts, window.max = 10) {
         train = ts[-test_index]
         # train must be converted into ts object!!!
         train = ts(train, start=c(start_year, 1), frequency = freq)
-        seasonality = seasonality1(train, w, d)
+        seasonality = seasonality3(train, w, d)
         pred = seasonality[1:freq]
         residual = (test - pred)
         SMSR = SMSR + mean(residual^2, na.rm = TRUE)
@@ -690,9 +811,33 @@ bestSeason = function(ts, window.max = 10) {
 
 ```{r, echo=TRUE}
 # long runtime!!!
-bestSeason(daily_ts)
-
+start_time = Sys.time()
+v = bestSeason(daily_ts)
+end_time = Sys.time()
+end_time - start_time
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

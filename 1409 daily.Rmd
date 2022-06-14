@@ -653,10 +653,11 @@ seasonality4 = function(ts, window, degree) {
       
       cluster = cluster[!is.na(cluster)]
       
-      range = quantile(cluster, prob = c(0.25, 0.75))
-      lb = as.numeric(range[1])
-      ub = as.numeric(range[2])
-      cluster = cluster[lb<=cluster&cluster<=ub]
+      # # set quantile & subset cluster without outlier(usually this step takes time)
+      # range = quantile(cluster, prob = c(0.25, 0.75))
+      # lb = as.numeric(range[1])
+      # ub = as.numeric(range[2])
+      # cluster = cluster[lb<=cluster&cluster<=ub]
       
       y = c(y, cluster)
       x = c(x, rep(w-i, length(cluster)))

@@ -15,6 +15,7 @@ library(tidyverse)
 library(forecast)
 library(stlplus)
 library(seasonal)
+library(L1pack)
 
 load("D:/NSERC/project/processedData/1409_dat.RData")
 
@@ -599,7 +600,8 @@ seasonality3 = function(ts, window, degree) {
 (4)
 # re-arrange the raw time series into same day equivalent classes
 ```{r, echo=TRUE}
-same_day_format = function(ts) {
+# trim: boolean - whether to trim out the outliers of cluster(matrix row)
+same_day_format = function(ts, trim=FALSE) {
   k = floor(tsp(ts)[2]-tsp(ts)[1])+1
   freq = as.integer(tsp(ts)[3])
   
@@ -607,10 +609,20 @@ same_day_format = function(ts) {
   for (i in (1:freq)) {
     indices = seq(from=i, to=i+(k-1)*freq, by=freq)
     row = ts[indices]
+    # whether to remove outliers or not
+    if (trim) {
+      # set quantile & subset
+      range = quantile(row, prob = c(0.25, 0.75), na.rm = TRUE)
+      lb = as.numeric(range[1])
+      ub = as.numeric(range[2])
+      row = row[lb<=row&row<=ub]
+    }
     M[[i]] = row
   }
   return (M)
 }
+
+
 
 ```
 
@@ -618,12 +630,13 @@ same_day_format = function(ts) {
 #run time check
 ```{r, echo=TRUE}
 start_time = Sys.time()
-m = same_day_format(daily_ts)
+m = same_day_format(daily_ts, TRUE)
 end_time = Sys.time()
 end_time - start_time
 
 
 ```
+
 ```{r, echo=TRUE}
 seasonality4 = function(ts, window, degree) {
 
@@ -631,7 +644,7 @@ seasonality4 = function(ts, window, degree) {
   k = floor(tsp(ts)[2]-tsp(ts)[1])+1
   freq = as.integer(tsp(ts)[3])
   
-  equi_class = same_day_format(ts)
+  equi_class = same_day_format(ts, TRUE)
   n = length(equi_class[[1]])
   
   seasonality = NULL
@@ -652,12 +665,6 @@ seasonality4 = function(ts, window, degree) {
       }
       
       cluster = cluster[!is.na(cluster)]
-      
-      # # set quantile & subset cluster without outlier(usually this step takes time)
-      # range = quantile(cluster, prob = c(0.25, 0.75))
-      # lb = as.numeric(range[1])
-      # ub = as.numeric(range[2])
-      # cluster = cluster[lb<=cluster&cluster<=ub]
       
       y = c(y, cluster)
       x = c(x, rep(w-i, length(cluster)))
@@ -692,16 +699,69 @@ seasonality4 = function(ts, window, degree) {
 ```
 
 
-
-
-# runtime for method 4
+(5) Least absolute deviations(LAD) regression
 ```{r, echo=TRUE}
-start_time = Sys.time()
-s4 = seasonality4(daily_ts, window = 51, degree = 2)
-end_time = Sys.time()
-end_time - start_time
+seasonality5 = function(ts, window, degree) {
+  # number of years
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
+  freq = as.integer(tsp(ts)[3])
+  
+  equi_class = same_day_format(ts)
+  n = length(equi_class[[1]])
+  
+  seasonality = NULL
+  for (i in (1:freq)) {
+    # [-w+i,..i,...w+i]
+    interval = seq(from=-window+i, to=window+i, by=1)
+    y = NULL
+    x = NULL
+    for (w in interval) {
+      if (w < 1) {
+        cluster = (equi_class[[w+freq]])[-n]
+      }
+      else if (w > freq) {
+        cluster = (equi_class[[w-freq]])[-1]
+      }
+      else {
+        cluster = equi_class[[w]]
+      }
+      
+      cluster = cluster[!is.na(cluster)]
+      
+      
+      
+      y = c(y, cluster)
+      x = c(x, rep(w-i, length(cluster)))
+    }
+    
+    # if (degree == 0) {
+    #   model = lad(y ~ 1)
+    #   yhat = as.numeric(model$fitted.values[which(x==0)][1])
+    # }
+    if (degree == 1) {
+      model = lad(y ~ x)
+      yhat = as.numeric(model$fitted.values[which(x==0)][1])
+    }
+    if (degree == 2) {
+      model = lad(y ~ x+I(x^2))
+      yhat = as.numeric(model$fitted.values[which(x==0)][1])
+    }
+    if (degree == 3) {
+      model = lad(y ~ x+I(x^2)+I(x^3))
+      yhat = as.numeric(model$fitted.values[which(x==0)][1])
+    }
+    
+    slots = seq(from=i, to=i+(k-1)*freq, by=freq)
+    seasonality[slots] = yhat
+  }
+  
+  return (seasonality)
+}
+
 
 ```
+
+
 
 
 
@@ -723,6 +783,7 @@ s1 = seasonality1(daily_ts, window = 51, degree = 2)
 s2 = seasonality2(daily_ts, window = 51, degree = 2)
 s3 = seasonality3(daily_ts, window = 51, degree = 2)
 s4 = seasonality4(daily_ts, window = 51, degree = 2)
+s5 = seasonality5(daily_ts, window = 51, degree = 2)
 end_time = Sys.time()
 end_time - start_time
 
@@ -731,10 +792,19 @@ end_time - start_time
 
 # plot seasonality
 ```{r, echo=TRUE}
-plot(s1, type ="l", xlim = c(0,1000), col = "black")
+#s1 & s2 are basically the same(with outliers)
+plot(s1, type ="l", xlim = c(0,1000), col = "black", main="s1&s2: with outliers")
 lines(s2, type ="l", xlim = c(0,1000), col = "red")
+
+# s3 & s4 are same (without outliers)
+plot(s3, type ="l", xlim = c(0,1000), col = "black", main="s3&s4: without outliers")
+lines(s4, type = "l", xlim = c(0,1000), col = "red")
+# lines(s5, type = "l", xlim = c(0,1000), col = "cyan")
+
+
+plot(s2, type ="l", xlim = c(0,1000), col = "black", main="compare")
 lines(s3, type ="l", xlim = c(0,1000), col = "blue")
-lines(s4, type = "l", xlim = c(0,1000), col = "green")
+lines(s4, type ="l", xlim = c(0,1000), col = "red")
 ```
 
 
@@ -764,7 +834,23 @@ end_time = Sys.time()
 end_time - start_time
 
 ```
+# runtime for method 4
+```{r, echo=TRUE}
+start_time = Sys.time()
+s4 = seasonality4(daily_ts, window = 51, degree = 2)
+end_time = Sys.time()
+end_time - start_time
 
+```
+
+# runtime for method 5
+```{r, echo=TRUE}
+start_time = Sys.time()
+s5 = seasonality5(daily_ts, window = 51, degree = 2)
+end_time = Sys.time()
+end_time - start_time
+
+```
 
 
 # Cross validation
@@ -790,7 +876,7 @@ bestSeason = function(ts, window.max = 10) {
         train = ts[-test_index]
         # train must be converted into ts object!!!
         train = ts(train, start=c(start_year, 1), frequency = freq)
-        seasonality = seasonality3(train, w, d)
+        seasonality = seasonality4(train, w, d)
         pred = seasonality[1:freq]
         residual = (test - pred)
         SMSR = SMSR + mean(residual^2, na.rm = TRUE)
@@ -819,7 +905,7 @@ end_time - start_time
 ```
 
 
-
+# package: parallel
 
 
 

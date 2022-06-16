@@ -69,13 +69,15 @@ readData = function(path) {
 
 # ts format
 ```{r, echo=TRUE}
-
+# mtx: data matrix
+# returns ts object from start_year to end_year with freq
 matrix_to_ts = function(mtx, freq = 365, start_year, end_year) {
   y = as.vector(t(mtx))
   return (ts(y, start = c(start_year, 1), end = c(end_year, 365), frequency = freq))
 }
 
 # category is string: the matrix name in Rdata file, i.e. "resp_mat"
+# returns ts object of given category
 cube_to_ts = function(Rdata, category) {
   if (category != "rain_mat" ||
       category != "snow_mat" ||
@@ -283,8 +285,7 @@ plot_boundaries(shapes[c(1, 11, 101, 31, 77)], TRUE)
 ```{r, echo=TRUE}
 # shape: a single shape file
 # long_min, long_max, lat_min, lat_max: lower and upper bounds on longitude and latitude;
-# strict: TRUE or FALSE for whether the shape is wholly inside the region or just partially inside;
-# Returns a boolean;
+# Returns a boolean whether the shape is wholly inside the region or just partially inside;;
 inside_region = function(shape, long_min, long_max, lat_min, lat_max) {
   x_min = xmin(shape)
   x_max = xmax(shape)
@@ -354,7 +355,24 @@ region(shapes[1:4], long = -125, lat = 55.1)
 ```
 
 
+# region(return grid code/station ID)
+```{r, echo=TRUE}
+# region = function(shapes, long, lat) {
+#   IDs = NULL
+#   for (i in (1:length(shapes))) {
+#     longs = geom(shapes[i])[,3]
+#     lats = geom(shapes[i])[,4]
+#     if (point.in.polygon(point.x = long, 
+#                          point.y = lat,
+#                          pol.x = longs,
+#                          pol.y = lats)) {
+#       IDs = c(IDs, shapes[i]$Station_ID)
+#     }
+#   }
+#   return (IDs)
+# }
 
+```
 
 
 

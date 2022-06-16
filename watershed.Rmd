@@ -17,6 +17,8 @@ library(zoo)
 library(forecast)
 library(sp)
 library(sf)
+library(rgdal)
+library(raster)
 ```
 
 
@@ -28,10 +30,10 @@ path = "D:/NSERC/project/processedData/"
 fileNames = list.files(path)
 
 # load shapes
-# shapes = vect("ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
+shapes = vect("D:/NSERC/project/WaterShedDataExample/ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
 
 # coordinates
-gridInfo = read.csv(file.choose(), sep = ";")
+gridInfo = read.csv("D:/NSERC/project/WaterShedDataExample/GridInfo.csv", sep = ";")
 
 
 # given file path, return list of Rdata(cube)
@@ -49,8 +51,8 @@ readData = function(path) {
 
 
 
-# alldata is a list of Rdata(cube)
-alldata = readData("D:/NSERC/project/processedData/")
+# # alldata is a list of Rdata(cube)
+# alldata = readData("D:/NSERC/project/processedData/")
 
 ```
 
@@ -64,13 +66,62 @@ alldata = readData("D:/NSERC/project/processedData/")
 #========================================================================================
 # Helpers
 
+
+# ts format
+```{r, echo=TRUE}
+
+matrix_to_ts = function(mtx, freq = 365, start_year, end_year) {
+  y = as.vector(t(mtx))
+  return (ts(y, start = c(start_year, 1), end = c(end_year, 365), frequency = freq))
+}
+
+# category is string: the matrix name in Rdata file, i.e. "resp_mat"
+cube_to_ts = function(Rdata, category) {
+  if (category != "rain_mat" ||
+      category != "snow_mat" ||
+      category != "temp_mat" ||
+      category != "resp_mat" ||
+      category != "yrs") {
+    print("Error!")
+    return ()
+  }
+  mtx = Rdata$category
+  start = Rdata$yrs[1]
+  end = Rdata$yrs[length(Rdata$yrs)]
+  return (matrix_to_ts(mtx, start, end))
+}
+
+
+
+# window is vector of string format dates: window = c("1980-01-01", "2000-01-01")
+SUBSET = function(mtx, window) {
+  start_year = substr(window[1], start=1, stop=4)
+  end_year = substr(window[2], start=1, stop=4)
+  ts = matrix_to_ts(mtx, start_year, end_year)
+  return (window(ts, start=c(start_year, 1), end=c(end_year, 365)))
+}
+
+
+```
+
+
 # Arithmetic
 ```{r, echo=TRUE}
 # sum of some values within a matrix
-SUM = function(m) {
+SUM = function(m, window = c()) {
+  years = m$yrs
+  lb = as.Date(paste0(years[1], "-01-01"))
+  ub = as.Date(paste0(years[length(years)], "12-31"))
+  start = window[1]
+  end = window[2]
+  if (start < lb || end > ub) {
+    print("window input error!")
+    return ()
+  }
+  
   sum = 0
   for (i in (nrow(m))) {
-    sum = sum + sum(m[i,])
+    sum = sum + sum(m[i,], na.rm = TRUE)
   }
   return (sum)
 }
@@ -181,9 +232,10 @@ dailyFrame = function(Rdata, impute=FALSE) {
 # plot some shapes
 ```{r, echo=TRUE}
 # given a list/vector of indices, plot the shp of watershed
+max_shape_num = 5
 plot_shape = function(index) {
-  if (length(index) > 5) {
-    print("max number of watersheds is 5")
+  if (length(index) > max_shape_num) {
+    print(paste("Error: max number of watersheds is", max_shape_num))
     return()
   }
   plot(shapes[index])
@@ -192,15 +244,40 @@ plot_shape = function(index) {
 ```
 
 
-# plot boundaries
+#tests
+```{r, echo=TRUE}
+plot_shape(c(1:6))
+plot_shape(c(1:5))
+plot_shape(c(11,79,101,200,5))
+
+```
+
+# plot watersheds's boundaries
 ```{r, echo=TRUE}
 # shapes: a set of shape files, e.g., shp_dat[1:3];
 # map: boolean - TRUE puts boundaries on a map;
 plot_boundaries = function(shapes, map) {
-  return ()
+  if (map) {
+    leaflet(sf::st_as_sf(shapes)) %>% addTiles() %>% addPolygons(fillOpacity=0.1)
+    # %>% addMarkers(lng=???, lat=???, popup="watershed No.")
+    
+  }
+  else {
+    plot(shapes)
+  }
 }
 
 ```
+
+#tests
+```{r, echo=TRUE}
+plot_boundaries(shapes[1:4], FALSE)
+plot_boundaries(shapes[1:4], TRUE)
+plot_boundaries(shapes[c(1, 11, 101, 31, 77)], TRUE)
+```
+
+
+
 
 # inside region?
 ```{r, echo=TRUE}
@@ -209,21 +286,41 @@ plot_boundaries = function(shapes, map) {
 # strict: TRUE or FALSE for whether the shape is wholly inside the region or just partially inside;
 # Returns a boolean;
 inside_region = function(shape, long_min, long_max, lat_min, lat_max) {
-  longs = shape$Longitude
-  lats = shape$Latitude
-  strict = TRUE
-  i = 1
-  while (strict && i <= length(longs)) {
-    if (!(long_min <= longs[i] && longs[i] <= long_max && lat_min <= lats[i] && lats[i] <= lat_max)) {
-      strict = FALSE
-    }
-    i = i + 1
-  }
-  return (strict)
+  x_min = xmin(shape)
+  x_max = xmax(shape)
+  y_min = ymin(shape)
+  y_max = ymax(shape)
+  return (long_min <= x_min && x_min <= long_max && lat_min <= y_min && y_max <= lat_max)
+  # longs = geom(shape)[,3]
+  # lats = geom(shape)[,4]
+  # strict = TRUE
+  # i = 1
+  # while (strict && i <= length(longs)) {
+  #   if (!(long_min <= longs[i] && longs[i] <= long_max && lat_min <= lats[i] && lats[i] <= lat_max)) {
+  #     strict = FALSE
+  #   }
+  #   i = i + 1
+  # }
+  # return (strict)
 }
 
 
 ```
+
+
+#tests
+```{r, echo=TRUE}
+plot_shape(c(1))
+start_time = Sys.time()
+inside_region(shapes[1], -132, -125, 57, 59.5)
+inside_region(shapes[1], -133, -126, 57, 59.5)
+end_time = Sys.time()
+end_time - start_time
+
+```
+
+
+
 
 
 # region
@@ -233,16 +330,38 @@ inside_region = function(shape, long_min, long_max, lat_min, lat_max) {
 region = function(shapes, long, lat) {
   indices = NULL
   for (i in (1:length(shapes))) {
-    if (point_in_polygon(shapes[i], long, lat)) {
+    longs = geom(shapes[i])[,3]
+    lats = geom(shapes[i])[,4]
+    if (point.in.polygon(point.x = long, 
+                         point.y = lat,
+                         pol.x = longs,
+                         pol.y = lats)) {
       indices = c(indices, i)
     }
   }
   return (indices)
 }
 
+```
+
+
+#tests
+```{r, echo=TRUE}
+plot_boundaries(shapes[1:4], FALSE)
+region(shapes[1:4], long = -125, lat = 55.1)
 
 
 ```
+
+
+
+
+
+
+
+
+
+
 
 
 

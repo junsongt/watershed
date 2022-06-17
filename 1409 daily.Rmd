@@ -697,6 +697,23 @@ seasonality4 = function(ts, window, degree) {
 
 
 ```
+Comments: Comparing seasonality3 and seasonality4
+
+Suppose for the case that interval points $w \in [i-\delta, i+\delta]$ such that $w < 1$, where $\delta$ is the window size(radius), then we should deduct the last element of the equi-class $[365-w]$, i.e. $[-1] = [364]$, $|[-1]|= |[364]| = 38$, $|cluster| = 37$, then the 2 methods differ from:
+
+seasonality3: (1) remove last element; (2) remove outliers;
+
+seasonality4: (1) remove outliers; (2) remove last element;
+
+Suppose $\{a_1, \ldots, a_n\} = [-1]$ and $a_n$ is an outlier but $a_{n-1}$ is not an outlier, particularly, $a_{n-1}$ is at the middle, then:
+
+For seasonality3: (1) remove last element $\Rightarrow \{a_1, \ldots, a_{n-1}\}$; (2) remove outliers $\Rightarrow a_{n-1} \in A$, where $A$ is the resulting cluster;
+
+For seasonality4: (1) remove outliers $\Rightarrow B \subset \{a_1, \ldots, a_{n-1}\}$, where $B$ is subsequence without outliers; (2) remove last element $\Rightarrow a_{n-1} \notin B' = B-\{a_{n-1}\}$, where $B'$ is the resulting cluster;
+
+Hence $A \neq B'$.
+
+
 
 
 (5) Least absolute deviations(LAD) regression
@@ -801,7 +818,7 @@ plot(s3, type ="l", xlim = c(0,1000), col = "black", main="s3&s4: without outlie
 lines(s4, type = "l", xlim = c(0,1000), col = "red")
 # lines(s5, type = "l", xlim = c(0,1000), col = "cyan")
 
-
+# compare two modes(with/without outliers)
 plot(s2, type ="l", xlim = c(0,1000), col = "black", main="compare")
 lines(s3, type ="l", xlim = c(0,1000), col = "blue")
 lines(s4, type ="l", xlim = c(0,1000), col = "red")
@@ -853,34 +870,53 @@ end_time - start_time
 ```
 
 
-# Cross validation
+# Cross validation(5 fold)
+# 38 => 8 + 8 + 8 + 8 + 6
 ```{r, echo=TRUE}
 bestSeason = function(ts, window.max = 10) {
   start_year = tsp(ts)[1]
   end_year = tsp(ts)[2]
-  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1 #k = 38 years
+  t = ceiling(k/5) #t = 8 years/unit
   freq = as.integer(tsp(ts)[3])
   minSMSR = Inf
   best_window = 0
   best_degree = 0
   for (w in (0:window.max)) {
-    for (d in (0:3)) {
+    for (d in (1:3)) {
       # sum of mean squared error over CVs
       SMSR = 0
-      # run k times CV
-      for (year in (1:k)) {
-        test_index = seq(from=1+(year-1)*freq, to=year*freq, by=1)
+      # run 5 times CV
+      for (i in (1:5)) {
+        test_index = seq(from=1+(i-1)*t*freq, to=min(i*t*freq, k*freq), by=1)
         test = ts[test_index]
-        # test must be converted into ts object!!!
-        test = ts(test, start=c(start_year+(year-1), 1), frequency = freq)
+        test = ts(test, start=c(start_year+(i-1)*t, 1), frequency = freq)
+        
         train = ts[-test_index]
-        # train must be converted into ts object!!!
         train = ts(train, start=c(start_year, 1), frequency = freq)
         seasonality = seasonality4(train, w, d)
-        pred = seasonality[1:freq]
+        
+        
+        pred = seasonality[1:length(test)]
         residual = (test - pred)
         SMSR = SMSR + mean(residual^2, na.rm = TRUE)
       }
+      
+      
+      
+      # for (year in (1:k)) {
+      #   test_index = seq(from=1+(year-1)*freq, to=year*freq, by=1)
+      #   test = ts[test_index]
+      #   # test must be converted into ts object!!!
+      #   test = ts(test, start=c(start_year+(year-1), 1), frequency = freq)
+      #   train = ts[-test_index]
+      #   # train must be converted into ts object!!!
+      #   train = ts(train, start=c(start_year, 1), frequency = freq)
+      #   seasonality = seasonality4(train, w, d)
+      #   pred = seasonality[1:freq]
+      #   residual = (test - pred)
+      #   SMSR = SMSR + mean(residual^2, na.rm = TRUE)
+      # }
       
       if (SMSR < minSMSR) {
         best_window = w
@@ -899,7 +935,7 @@ bestSeason = function(ts, window.max = 10) {
 ```{r, echo=TRUE}
 # long runtime!!!
 start_time = Sys.time()
-v = bestSeason(daily_ts)
+bestSeason(daily_ts)
 end_time = Sys.time()
 end_time - start_time
 ```
@@ -931,15 +967,6 @@ end_time - start_time
 
 
 
-
-
-
-```{r, echo=TRUE}
-remain_loess = stl(daily_ts-s3, s.window = "periodic")
-plot(remain_loess)
-
-
-```
 
 
 

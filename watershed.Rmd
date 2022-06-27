@@ -19,6 +19,9 @@ library(sp)
 library(sf)
 library(rgdal)
 library(raster)
+library(maptiles)
+library(shiny)
+library(ggplot2)
 ```
 
 
@@ -42,9 +45,9 @@ readData = function(path) {
   filesList = list()
   for (i in (1:length(fileNames))) {
     suffix = fileNames[i]
-    datafile = mget(load(paste0(path, suffix)))
+    rdata = mget(load(paste0(path, suffix)))
     # mget returns a list of single-element list:[[*], [*], ...], use index form datafile[[i]]
-    filesList[[i]] = datafile
+    filesList[[i]] = daily_frame(rdata)
   }
   return(filesList)
 }
@@ -57,44 +60,92 @@ readData = function(path) {
 ```
 
 
+# accessing shape file/Rdata file/grid code
+```{r, echo=TRUE}
+gridCodes = gridInfo$gridcode
+shapeIDs = NULL
+for (i in (1:length(shapes))) {
+  shapeIDs = c(shapeIDs, shapes[i]$gridcode)
+}
+length(gridCodes) == length(shapeIDs)
+length(gridCodes) == length(gridCodes == shapeIDs)
+# conclusion: gridInfo has the same order and length of shapes, in fact we can use gridInfo index to access single shape file in shapes
 
+
+# 1409 Rdata file and its corresponding shape file
+shape1409 = shapes[which(gridCodes == 1409)]
+# 1409 Rdata file(list of matrices)
+data1409 = mget(load(paste0(path, "1409_dat.Rdata"))) 
+```
 
 
 
 
 
 #========================================================================================
-# Helpers
-
+# Helpers(under construction)
 
 # ts format
 ```{r, echo=TRUE}
 # mtx: data matrix
 # returns ts object from start_year to end_year with freq
 matrix_to_ts = function(mtx, freq = 365, start_year, end_year) {
+  # as.vector goes along the column(vertically) of a matrix
   y = as.vector(t(mtx))
   return (ts(y, start = c(start_year, 1), end = c(end_year, 365), frequency = freq))
 }
 
-# category is string: the matrix name in Rdata file, i.e. "resp_mat"
+# category is string: the matrix name in Rdata file, i.e. "resp_mat", "rain_mat"
 # returns ts object of given category
 cube_to_ts = function(Rdata, category) {
-  if (category != "rain_mat" ||
-      category != "snow_mat" ||
-      category != "temp_mat" ||
-      category != "resp_mat" ||
-      category != "yrs") {
-    print("Error!")
-    return ()
-  }
-  mtx = Rdata$category
+  mtx = Rdata[[which(names(Rdata) == category)]]
   start = Rdata$yrs[1]
   end = Rdata$yrs[length(Rdata$yrs)]
-  return (matrix_to_ts(mtx, start, end))
+  return (matrix_to_ts(mtx, start_year=start, end_year=end))
 }
 
 
+# return a multivariate ts in data frame
+cube_to_mts = function(Rdata) {
+  df = data.frame()
+  for (i in (1:(length(Rdata)-1))) {
+    mtx = Rdata[[i]]
+    start = Rdata$yrs[1]
+    end = Rdata$yrs[length(Rdata$yrs)]
+    ts = matrix_to_ts(mtx, start_year=start, end_year=end)
+    if (dim(df)[1] == 0) {
+      df = data.frame(ts)
+    } # if current ts has same length as previous ones
+    else if (dim(df)[1] == length(ts)) {
+      df = data.frame(df, ts)
+    } # if current ts differs in length from previous ones, then trim(longer)/pad(shorter)
+    else {
+      length(ts) = dim(df)[1]
+      df = data.frame(df, ts)
+    }
+    names(df)[i] = names(Rdata)[i]
+  }
+  return (df)
+  
+}
 
+# remark: mts is data frame, also list object, to access one ts element, use list index
+
+
+```
+
+#test
+```{r, echo=TRUE}
+mts1409 = cube_to_mts(data1409)
+
+```
+
+
+
+
+# TODO (under construction)
+# Arithmetic
+```{r, echo=TRUE}
 # window is vector of string format dates: window = c("1980-01-01", "2000-01-01")
 SUBSET = function(mtx, window) {
   start_year = substr(window[1], start=1, stop=4)
@@ -103,12 +154,6 @@ SUBSET = function(mtx, window) {
   return (window(ts, start=c(start_year, 1), end=c(end_year, 365)))
 }
 
-
-```
-
-
-# Arithmetic
-```{r, echo=TRUE}
 # sum of some values within a matrix
 SUM = function(m, window = c()) {
   years = m$yrs
@@ -143,129 +188,241 @@ windowMEAN = function(m, window) {
   return (windowSUM(m, window) / length())
 }
 
-```
 
-
-# Format
-```{r, echo=TRUE}
-# month-format
-month_format = function() {
-  month = NULL
-  for (m in (1:12)) {
-    if ((m <= 7 && m %% 2 == 1) || (m >= 8 && m %% 2 == 0)) {
-      month = c(month, rep(m, 31))
-    } else if (m == 2) {
-      month = c(month, rep(m, 28))
-    } else {
-      month = c(month, rep(m, 30))
-    }
-  }
-  return (month)
-}
-
-
-# day-format
-day_format = function() {
-  day = NULL
-  for (m in (1:12)) {
-    if ((m <= 7 && m %% 2 == 1) || (m >= 8 && m %% 2 == 0)) {
-      day = c(day, seq(from = 1, to = 31, by = 1))
-    } else if (m == 2) {
-      day = c(day, seq(from = 1,to = 28,by = 1))
-    } else {
-      day = c(day, seq(from = 1,to = 30,by = 1))
-    }
-  }
-  return (day)
-}
-
-# given a Rdata file, return a complete data frame(with covariates & response)
-dailyFrame = function(Rdata, impute=FALSE) {
-  # number of years
-  n = length(Rdata[[1]][, 1])
+# snow fraction(faster version)
+# input: Rdata file
+# return: (double) snow fraction
+snow_fraction = function(Rdata) {
+  snow = Rdata$snow_mat
+  rain = Rdata$rain_mat
+  snow_sum = 0
+  rain_sum = 0
   
-  # format unit month & days in calender
-  month = month_format()
-  day = day_format()
-  # repeat unit format for n years
-  months = rep(month, n)
-  days = rep(day, n)
-  # format years from 1980 to 
-  years = rep(1980:(1980+n-1), each=365)
-  
-  frame = data.frame(years, months, days)
-  for (k in (1:(length(Rdata)-1))) {
-    # data one of matrices in Rdata(cube) file
-    data = Rdata[[k]]
-    values = NULL
-    for (i in (1:n)) {
-      for (j in (1:length(data[1,]))) {
-        values = c(values, data[i,j])
-        #N/A & imputation if applicable
-        if (impute) {
-          ind = (i-1)*365 + j
-          if (is.na(values[ind])) {
-            values[ind] = values[ind-365]
-          }
-        }
+  # assume that snow & rain matrices have same dimensions
+  for (r in (1:nrow(snow))) {
+    for (c in (1:length(snow[1,]))) {
+      # NA issue(if one of them missing, ignore both)
+      if (!is.na(snow[r,c]) && !is.na(rain[r,c])) {
+        snow_sum = snow_sum + snow[r,c]
+        rain_sum = rain_sum + rain[r,c]
       }
+
     }
-    
-    if (dim(frame)[1] == length(values)) {
-      frame = data.frame(frame, values)
-      names(frame)[k+3] = names(Rdata)[k]
-    }
-    # else, we could pad the shorter vector: length(values) = dim(frame)[1]
-    # frame = data.frame(frame, values)
-    # names(frame)[k+3] = names(Rdata)[k]
   }
-  return (frame)
+  snow_ratio = snow_sum / (snow_sum + rain_sum)
+  return (snow_ratio)
 }
 
 
-# results <- sapply(files, function(x) mget(load(paste0("D:/NSERC/project/processedData", x))), simplify = TRUE)
+# rain fraction(faster version)
+rain_fraction = function(Rdata) {
+  return (1 - snow_fraction(Rdata))
+}
 
 ```
+
+
+
+
+
+<!-- # snow fraction & rain fraction on mts object -->
+<!-- ```{r, echo=TRUE} -->
+<!-- # A multivariate time series including univariate time series named "rain" and "snow" -->
+<!-- # Returns the snow fraction, i.e., total snow / (total rain + total snow). -->
+<!-- # Any time with missing rain or snow or both is ignored. -->
+
+
+<!-- # mts is usually a data frame with col: -->
+<!-- # Time snow_mat rain_mat -->
+<!-- snow_fraction = function(mts) { -->
+<!--   snow = mts$snow_mat -->
+<!--   rain = mts$rain_mat -->
+<!--   snow_sum = 0 -->
+<!--   rain_sum = 0 -->
+
+<!--   # assume that snow & rain matrices have same lengths -->
+<!--   for (i in (1:length(snow))) { -->
+<!--     # NA issue -->
+<!--     if (!is.na(snow[i]) && !is.na(rain[i])) { -->
+<!--       snow_sum = snow_sum + snow[i] -->
+<!--       rain_sum = rain_sum + rain[i] -->
+<!--     } -->
+<!--   } -->
+
+<!--   snow_ratio = snow_sum / (snow_sum + rain_sum) -->
+<!--   return (snow_ratio) -->
+<!-- } -->
+
+
+<!-- #rain fraction -->
+<!-- rain_fraction = function(mts) { -->
+<!--   return (1 - snow_fraction(mts)) -->
+<!-- } -->
+
+
+<!-- ``` -->
+
+
+# test time for snow fraction
+```{r, echo=TRUE}
+start_time = Sys.time()
+snow_fraction(data1409)
+end_time = Sys.time()
+end_time - start_time
+
+
+```
+
+
+
+
+
+
+
+
+
 
 
 #========================================================================================
 # Functionalities
 
-# plot some shapes
+# TODO (under construction)
+# fetch summary
 ```{r, echo=TRUE}
-# given a list/vector of indices, plot the shp of watershed
-max_shape_num = 5
-plot_shape = function(index) {
-  if (length(index) > max_shape_num) {
-    print(paste("Error: max number of watersheds is", max_shape_num))
-    return()
+# input shape files, 
+# return grid codes(watershed No.) + snow fractions + rain fractions in data frame
+get_fraction = function(shapes) {
+
+  grid_codes = shapes$gridcode
+  snow_ratios = NULL
+  rain_ratios = NULL
+  for (i in (1:length(grid_codes))) {
+    filename = paste0(grid_codes[i], "_dat.RData")
+    # exception handling
+    if (!(filename %in% fileNames)) {
+      snow_ratios = c(snow_ratios, NA)
+      rain_ratios = c(rain_ratios, NA)
+    }
+    else {
+      data = mget(load(paste0(path, grid_codes[i], "_dat.RData")))
+      sr = snow_fraction(data)
+      rr = rain_fraction(data)
+      snow_ratios = c(snow_ratios, sr)
+      rain_ratios = c(rain_ratios, rr)
+    }
   }
-  plot(shapes[index])
+  return (data.frame(grid_codes, snow_ratios, rain_ratios))
+}
+
+
+
+render_piechart = function(shapes) {
+  df = get_fraction(shapes)
+  for (i in (1:(dim(df)[1]))) {
+    row = as.vector(as.numeric(df[i,]))
+    pie(row[-1], labels = c("snow fraction", "rain fraction"),
+        main = paste("watershed", as.character(row[1])))
+  }
+}
+
+
+get_ts_summary = function(shapes) {
+  
+}
+
+```
+
+#test
+```{r, echo=TRUE}
+# indices = c(1061, 1273, 1368) -> watershed file:(1003, 1013, 1409)
+get_fraction(shapes[c(1061,1273,1368)])
+render_piechart(shapes[c(1061,1273,1368)])
+
+```
+
+
+
+
+
+
+
+
+# TODO (under construction)
+# load any info about the watersheds/shapes
+```{r, echo}
+load_content = function(shapes, option) {
+  content = NULL
+  for (i in (1:length(shapes))) {
+    switch(option,
+      "fraction" = {
+        stats = get_fraction(shapes)
+        sr = stats[i,][2]
+        rr = stats[i,][3]
+        if (is.na(sr) || is.na(rr)) {
+          content = c(content, paste0("<br>watershed:", stats[i,][1], 
+                                      "<br>snow fraction:", stats[i,][2],
+                                      "<br>rain fraction:", stats[i,][3]))
+        } else {
+          content = c(content, paste0("<br>watershed:", stats[i,][1], 
+                                      "<br>snow fraction:", round(stats[i,][2],2)*100,"%",
+                                      "<br>rain fraction:", round(stats[i,][3],2)*100,"%"))
+        }
+        
+      },
+      "summary" = {
+        
+        
+      },
+      "piechart" = {
+        
+      }
+    )
+    
+    
+  }
+  return (content)
+  
 }
 
 ```
 
 
-#tests
-```{r, echo=TRUE}
-plot_shape(c(1:6))
-plot_shape(c(1:5))
-plot_shape(c(11,79,101,200,5))
-
-```
-
-# plot watersheds's boundaries
+# TODO (under construction)
+# plot watersheds's boundaries(shapes)
 ```{r, echo=TRUE}
 # shapes: a set of shape files, e.g., shp_dat[1:3];
 # map: boolean - TRUE puts boundaries on a map;
-plot_boundaries = function(shapes, map) {
+plot_shape = function(shapes, map=TRUE, option="fraction") {
+  # center_longs = shapes$Longitude
+  # center_lats = shapes$Latitude
+  stats = get_fraction(shapes)
+  content = load_content(shapes, option = option)
+  # list of x coord(longitude) of centroid
+  center_longs = NULL
+  # list of y coord(latitude) of centroid
+  center_lats = NULL
+  for (i in (1:length(shapes))) {
+    center_longs = c(center_longs, mean(geom(shapes[i])[,3]))
+    center_lats = c(center_lats, mean(geom(shapes[i])[,4]))
+  }
+  
   if (map) {
-    leaflet(sf::st_as_sf(shapes)) %>% addTiles() %>% addPolygons(fillOpacity=0.1)
-    # %>% addMarkers(lng=???, lat=???, popup="watershed No.")
-    
+    # leaflet(sf::st_as_sf(shapes)) %>% addTiles() %>% addPolygons(fillOpacity=0.1) %>% addMarkers(lng=center_longs, lat=center_lats, popup=content) 
+    # %>% addPopups(center_longs, center_lats, popup=content, options = popupOptions(closeButton = TRUE))
+    m = leaflet(sf::st_as_sf(shapes))
+    m = addTiles(m) 
+    m = addPolygons(m, fillOpacity=0.1)
+    m = addMarkers(m, lng=center_longs, lat=center_lats, popup=content)
+    # # mouse hovering to get content
+    # m = addMarkers(m, lng=center_longs, lat=center_lats, label=lapply(content, HTML))
+    m
   }
   else {
     plot(shapes)
+    # m = leaflet(sf::st_as_sf(shapes))
+    # m = addPolygons(m, fillOpacity=0.1)
+    # m = addMarkers(m, lng=center_longs, lat=center_lats, popup=content)
+    # m
   }
 }
 
@@ -273,10 +430,34 @@ plot_boundaries = function(shapes, map) {
 
 #tests
 ```{r, echo=TRUE}
-plot_boundaries(shapes[1:4], FALSE)
-plot_boundaries(shapes[1:4], TRUE)
-plot_boundaries(shapes[c(1, 11, 101, 31, 77)], TRUE)
+# plot_shape(shapes[1:4], FALSE, "fraction")
+plot_shape(shapes[1:4], TRUE, "fraction")
+# plot_shape(shapes[c(1, 11, 101, 31, 77)], TRUE, "fraction")
+plot_shape(shapes[c(1061,1273,1368)], TRUE, "fraction")
+# plot_shape(shapes[c(1061,1273,1368)], FALSE, "fraction")
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -311,7 +492,7 @@ inside_region = function(shape, long_min, long_max, lat_min, lat_max) {
 
 #tests
 ```{r, echo=TRUE}
-plot_shape(c(1))
+plot_shape(shapes[1], FALSE)
 start_time = Sys.time()
 inside_region(shapes[1], -132, -125, 57, 59.5)
 inside_region(shapes[1], -133, -126, 57, 59.5)
@@ -324,11 +505,11 @@ end_time - start_time
 
 
 
-# region
+# in_which_region
 ```{r, echo=TRUE}
 # shapes: a list of shape files
 # Returns the index of the shape containing the longitude and latitude
-region = function(shapes, long, lat) {
+in_which_region = function(shapes, long, lat) {
   indices = NULL
   for (i in (1:length(shapes))) {
     longs = geom(shapes[i])[,3]
@@ -348,16 +529,14 @@ region = function(shapes, long, lat) {
 
 #tests
 ```{r, echo=TRUE}
-plot_boundaries(shapes[1:4], FALSE)
-region(shapes[1:4], long = -125, lat = 55.1)
-
-
+plot_shape(shapes[1:4], FALSE)
+in_which_region(shapes[1:4], long = -125, lat = 55.1)
 ```
 
 
-# region(return grid code/station ID)
+# in_which_region(return grid code/station ID)
 ```{r, echo=TRUE}
-# region = function(shapes, long, lat) {
+# in_which_region = function(shapes, long, lat) {
 #   IDs = NULL
 #   for (i in (1:length(shapes))) {
 #     longs = geom(shapes[i])[,3]
@@ -378,108 +557,265 @@ region(shapes[1:4], long = -125, lat = 55.1)
 
 
 
-
-
-
-
-
-# snow fraction
 ```{r, echo=TRUE}
-# A multivariate time series including univariate time series named "rain" and "snow"
-# Returns the snow fraction, i.e., total snow / (total rain + total snow).
-# Any time with missing rain or snow or both is ignored.
-
-
-# mts is usually a data frame with col:
-# Time snow_mat rain_mat
-snow_fraction = function(mts) {
-  snow = mts$snow_mat
-  rain = mts$rain_mat
-  snow_sum = 0
-  rain_sum = 0
-  # assume that snow & rain matrices have same dimensions
-  for (r in (1:nrow(snow))) {
-    for (c in (1:length(snow[1,]))) {
-      # NA issue
-      if (!is.na(snow[r,c]) && !is.na(rain[r,c])) {
-        snow_sum = snow_sum + snow[r,c]
-        rain_sum = rain_sum + rain[r,c]
-      }
-      
-    }
-  }
-  snow_ratio = snow_sum / (snow_sum + rain_sum)
-  return (snow_ratio)
-}
+# shapes[1:2] is "SpatVector" object
+# ext(shapes[1:2]) is "SpatExtent" object
+# box is "SpatRaster" object
+# Http error 404 can be solved by giving different online map provider
+box = get_tiles(x = ext(shapes[1:3]), provider = "Esri.WorldStreetMap")
+plotRGB(box)
+lines(shapes[1:3], col = "blue")
+lines(ext(shapes[1:3]))
 
 
 ```
 
-# rain fraction
+
+
+
+
+
+
+
+
+# Format(temporary finished refinement)
 ```{r, echo=TRUE}
-rain_fraction = function(mts) {
-  snow = mts$snow_mat
-  rain = mts$rain_mat
-  snow_sum = 0
-  rain_sum = 0
-  # assume that snow & rain matrices have same dimensions
-  for (r in (1:nrow(snow))) {
-    for (c in (1:length(snow[1,]))) {
-      # NA issue
-      if (!is.na(snow[r,c]) && !is.na(rain[r,c])) {
-        snow_sum = snow_sum + snow[r,c]
-        rain_sum = rain_sum + rain[r,c]
-      }
+# month-format
+month_format = function() {
+  month = NULL
+  for (m in (1:12)) {
+    if ((m <= 7 && m %% 2 == 1) || (m >= 8 && m %% 2 == 0)) {
+      month = c(month, rep(m, 31))
+    } else if (m == 2) {
+      month = c(month, rep(m, 28))
+    } else {
+      month = c(month, rep(m, 30))
     }
   }
-  rain_ratio = rain_sum / (snow_sum + rain_sum)
-  return (rain_ratio)
+  return (month)
 }
 
-```
 
-# precipitation ratio
-```{r, echo=TRUE}
-# given a list/vector of indices, compute the precipitation ratio of given watershed index in data frame form
-# Any time with missing rain or snow or both is ignored.
-precip_ratio = function(index) {
-  snow_ratios = NULL
-  rain_ratios = NULL
-  watershed = NULL
-  for (i in index) {
-    suffix = fileNames[i]
-    datafile = mget(load(paste0(path, suffix)))
+# day-format
+day_format = function() {
+  day = NULL
+  for (m in (1:12)) {
+    if ((m <= 7 && m %% 2 == 1) || (m >= 8 && m %% 2 == 0)) {
+      day = c(day, seq(from = 1, to = 31, by = 1))
+    } else if (m == 2) {
+      day = c(day, seq(from = 1,to = 28,by = 1))
+    } else {
+      day = c(day, seq(from = 1,to = 30,by = 1))
+    }
+  }
+  return (day)
+}
+
+# given a Rdata file, return a complete data frame(with covariates & response)
+daily_frame = function(Rdata, impute=FALSE) {
+  #start year
+  start = Rdata$yrs[1]
+  # number of years
+  n = length(Rdata[[1]][, 1])
+  
+  # format unit month & days in calender
+  month = month_format()
+  day = day_format()
+  # repeat unit format for n years
+  months = rep(month, n)
+  days = rep(day, n)
+  # format years from 1980 to 
+  years = rep(start:(start+n-1), each=365)
+  
+  frame = data.frame(years, months, days)
+  
+  # refined version
+  for (k in (1:(length(Rdata)-1))) {
+    values = as.vector(t(Rdata[[k]]))
     
-    # snow_ratio = snow_fraction(datafile)
-    # rain_ratio = rain_fraction(datafile)
+    # # N/A & imputation if applicable
+    # if (impute) {
+    #   na_indices = which(is.na(values))
+    #   # imputation method
+    #   values[na_indices] = values[na_indices - 365]
+    # }
     
-    snow = datafile$snow_mat
-    rain = datafile$rain_mat
-    
-    snow_sum = 0
-    rain_sum = 0
-    # assume that snow & rain matrices have same dimensions
-    for (r in (1:nrow(snow))) {
-      for (c in (1:length(snow[1,]))) {
-        # NA issue
-        if (!is.na(snow[r,c]) && !is.na(rain[r,c])) {
-          snow_sum = snow_sum + snow[r,c]
-          rain_sum = rain_sum + rain[r,c]
+    # some Rdata file do not have covariate/resp lists of same length:
+    # i.e. length(snow)=length(rain) != length(resp)
+    if (dim(frame)[1] == length(values)) {
+      frame = cbind(frame, values)
+      names(frame)[k+3] = names(Rdata)[k]
+    }
+    # # else, we could pad the shorter vector: length(values) = dim(frame)[1]
+    # else {
+    #   length(values) = dim(frame)[1]
+    #   frame = cbind(frame, values)
+    #   names(frame)[k+3] = names(Rdata)[k]
+    # }
+  }
+  
+  # N/A & imputation if applicable
+  if (impute) {
+    l = dim(frame)[1]
+    w = dim(frame)[2]
+    for (i in (1:l)) {
+      for (j in (4:w)) {
+        if (is.na(frame[[j]][i])) {
+          frame[[j]][i] = frame[[j]][i-365]
         }
-        
       }
     }
-
-    snow_ratio = snow_sum / (snow_sum + rain_sum)
-    rain_ratio = rain_sum / (snow_sum + rain_sum)
-    snow_ratios = c(snow_ratios, snow_ratio)
-    rain_ratios = c(rain_ratios, rain_ratio)
-    watershed = c(watershed, suffix)
   }
-  return (data.frame(watershed, snow_ratios, rain_ratios))
+  
+  
+  
+  # # original version
+  # for (k in (1:(length(Rdata)-1))) {
+  #   # data one of matrices in Rdata(cube) file
+  #   mtx = Rdata[[k]]
+  #   values = NULL
+  #   for (i in (1:n)) {
+  #     for (j in (1:length(mtx[1,]))) {
+  #       values = c(values, mtx[i,j])
+  #       
+  #       #N/A & imputation if applicable
+  #       if (impute) {
+  #         ind = (i-1)*365 + j
+  #         if (is.na(values[ind])) {
+  #           values[ind] = values[ind-365]
+  #         }
+  #       }
+  #       
+  #     }
+  #   }
+  #   
+  #   if (dim(frame)[1] == length(values)) {
+  #     frame = cbind(frame, values)
+  #     names(frame)[k+3] = names(Rdata)[k]
+  #   }
+  #   # else, we could pad the shorter vector: length(values) = dim(frame)[1]
+  #   # frame = cbind(frame, values)
+  #   # names(frame)[k+3] = names(Rdata)[k]
+  # }
+  return (frame)
+}
+
+
+
+```
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+df = daily_frame(data1409, impute = TRUE)
+df[is.na(df$resp_mat),]
+end_time = Sys.time()
+end_time - start_time
+```
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+df = daily_frame(data1409, impute = FALSE)
+df[is.na(df$resp_mat),]
+end_time = Sys.time()
+end_time - start_time
+```
+
+
+
+# monthly smooth
+```{r, echo=TRUE}
+# rsf is data.frame
+# values is vector of new values
+accumulate_frame = function(rsf, values) {
+  
+  
+}
+
+monthly_average = function(Rdata) {
+  
+  daily = daily_frame(Rdata, impute = FALSE)
+  # start year
+  start = daily$years[1]
+  k = dim(daily)[2]-3 # total number of category(i.e. snow, rain, temp...)
+  
+  monthly = data.frame()
+  
+  year = NULL
+  month = NULL
+  
+  m = 1 # month cursors
+  sum = rep(0, k) # sum accumulator(row vector!)
+  
+  count = 0 # days accumulator
+  ycount = 0 #  years accumulator
+  for (i in (1:length(daily$months))) {
+    # get all current values of snow, rain, temp, resp in vector
+    curr = NULL
+    for (j in (1:k)) {
+      curr = c(curr, daily[[3+j]][i])
+      # curr = c(curr, daily[i,(3+j)])
+    }
+    # curr = daily[i,][-(1:3)]: # this method is very slow!
+    
+    # sum: row vector
+    # curr: row vector
+    # avg: row vector
+    # monthly: data frame/matrix
+    
+    # with the same month && not at December 31st
+    if (m == daily$months[i] && i < length(daily$months)) {
+      sum = sum + curr
+      count = count + 1
+    } # with the same month && at December 31st
+    else if (m == daily$months[i] && i == length(daily$months)) {
+      sum = sum + curr
+      count = count + 1
+      avg = sum / count
+      monthly = rbind(monthly, avg)
+      month = c(month, m)
+      year = c(year, start+ycount)
+    } # at the point of month change(1st day of next month)
+    else {
+      avg = sum / count
+      monthly = rbind(monthly, avg)
+      month = c(month, m)
+      year = c(year, start+ycount)
+      if (m == 12) {
+        ycount = ycount + 1
+      }
+      m = daily$months[i]
+      sum = curr
+      count = 1
+    }
+  }
+  # note k+3 = dim(daily)[2]
+  names(monthly) = names(daily[4:(k+3)])
+  return (data.frame(year, month, monthly))
 }
 
 ```
 
 
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+monthly_average(data1409)
+end_time = Sys.time()
+end_time - start_time
+
+
+```
+
+
+
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+alldata = readData("D:/NSERC/project/processedData/")
+nd_time = Sys.time()
+end_time - start_time
+
+
+```
 

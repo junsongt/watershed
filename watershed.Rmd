@@ -24,8 +24,11 @@ library(shiny)
 library(ggplot2)
 ```
 
+#load some stuff
+```{r, echo=TRUE}
+source(file.choose())
 
-
+```
 
 #========================================================================================# Global variables
 ```{r, echo=TRUE}
@@ -34,6 +37,11 @@ fileNames = list.files(path)
 
 # load shapes
 shapes = vect("D:/NSERC/project/WaterShedDataExample/ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
+
+
+# shape_attr = st_read("D:/NSERC/project/WaterShedDataExample/ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
+
+shape_attr = read_sf("D:/NSERC/project/WaterShedDataExample/ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
 
 # coordinates
 gridInfo = read.csv("D:/NSERC/project/WaterShedDataExample/GridInfo.csv", sep = ";")
@@ -47,7 +55,7 @@ readData = function(path) {
     suffix = fileNames[i]
     rdata = mget(load(paste0(path, suffix)))
     # mget returns a list of single-element list:[[*], [*], ...], use index form datafile[[i]]
-    filesList[[i]] = daily_frame(rdata)
+    filesList[[i]] = rdata
   }
   return(filesList)
 }
@@ -63,15 +71,17 @@ readData = function(path) {
 # accessing shape file/Rdata file/grid code
 ```{r, echo=TRUE}
 gridCodes = gridInfo$gridcode
-shapeIDs = NULL
-for (i in (1:length(shapes))) {
-  shapeIDs = c(shapeIDs, shapes[i]$gridcode)
-}
+# shapeIDs = NULL
+# for (i in (1:length(shapes))) {
+#   shapeIDs = c(shapeIDs, shapes[i]$gridcode)
+# }
+
+shapeIDs = shape_attr$gridcode
 length(gridCodes) == length(shapeIDs)
 length(gridCodes) == length(gridCodes == shapeIDs)
 # conclusion: gridInfo has the same order and length of shapes, in fact we can use gridInfo index to access single shape file in shapes
 
-
+l = shapes[[1]]
 # 1409 Rdata file and its corresponding shape file
 shape1409 = shapes[which(gridCodes == 1409)]
 # 1409 Rdata file(list of matrices)
@@ -87,43 +97,50 @@ data1409 = mget(load(paste0(path, "1409_dat.Rdata")))
 
 # ts format
 ```{r, echo=TRUE}
-# mtx: data matrix
+# data: matrix or vector/list form containing all daily data of single category(snow,rain)
 # returns ts object from start_year to end_year with freq
-matrix_to_ts = function(mtx, freq = 365, start_year, end_year) {
-  # as.vector goes along the column(vertically) of a matrix
-  y = as.vector(t(mtx))
-  return (ts(y, start = c(start_year, 1), end = c(end_year, 365), frequency = freq))
+uts = function(data, freq = 365, start_year, end_year) {
+  if (is.vector(data) || is.list(data)) {
+    return (ts(data, start = c(start_year, 1), end = c(end_year, 365), frequency = freq))
+  }
+  if (is.matrix(data)) {
+    # as.vector goes along the column(vertically) of a matrix
+    y = as.vector(t(data))
+    return (ts(y, start = c(start_year, 1), end = c(end_year, 365), frequency = freq))
+  }
+  
+  
 }
 
-# category is string: the matrix name in Rdata file, i.e. "resp_mat", "rain_mat"
-# returns ts object of given category
-cube_to_ts = function(Rdata, category) {
-  mtx = Rdata[[which(names(Rdata) == category)]]
-  start = Rdata$yrs[1]
-  end = Rdata$yrs[length(Rdata$yrs)]
-  return (matrix_to_ts(mtx, start_year=start, end_year=end))
-}
+# # category is string: the matrix name in Rdata file, i.e. "resp_mat", "rain_mat"
+# # returns ts object of given category
+# cube_to_ts = function(Rdata, category) {
+#   mtx = Rdata[[which(names(Rdata) == category)]]
+#   start = Rdata$yrs[1]
+#   end = Rdata$yrs[length(Rdata$yrs)]
+#   return (matrix_to_ts(mtx, start_year=start, end_year=end))
+# }
 
-
+# input: list form of watershed data, i.e. Rdata, data frame
 # return a multivariate ts in data frame
-cube_to_mts = function(Rdata) {
+mts = function(data) {
   df = data.frame()
-  for (i in (1:(length(Rdata)-1))) {
-    mtx = Rdata[[i]]
-    start = Rdata$yrs[1]
-    end = Rdata$yrs[length(Rdata$yrs)]
-    ts = matrix_to_ts(mtx, start_year=start, end_year=end)
+  for (i in (1:(length(data)-1))) {
+    mtx = data[[i]]
+    start = data$yrs[1]
+    end = data$yrs[length(data$yrs)]
+    ts = uts(mtx, start_year=start, end_year=end)
     if (dim(df)[1] == 0) {
       df = data.frame(ts)
     } # if current ts has same length as previous ones
     else if (dim(df)[1] == length(ts)) {
-      df = data.frame(df, ts)
+      df = cbind(df, ts)
     } # if current ts differs in length from previous ones, then trim(longer)/pad(shorter)
     else {
       length(ts) = dim(df)[1]
-      df = data.frame(df, ts)
+      df = cbind(df, ts)
     }
-    names(df)[i] = names(Rdata)[i]
+    names(df)[i] = substr(names(data)[i],start=1,stop=4)
   }
   return (df)
   
@@ -136,92 +153,186 @@ cube_to_mts = function(Rdata) {
 
 #test
 ```{r, echo=TRUE}
-mts1409 = cube_to_mts(data1409)
+start_time = Sys.time()
+mts1409 = mts(data1409)
+end_time = Sys.time()
+end_time - start_time
 
 ```
 
 
 
+=========================================================================================
+# Watershed object
 
-# TODO (under construction)
-# Arithmetic
+attributes:
+# mts(snow, rain, temp, resp)
+# gridcode
+# shape object(could be null when initializing)
+
+
+method:
+# get_fraction()
+# render_plot
+# ...
+
+
+constructor input:
+#data: has to be in list form(data frame containing covariates), because it has to contain snow, rain, temp, resp
+# (i.e. RData, data frame), also could be null
+# gridcode has to be integer, non-null
+# shape has to be "SpatVector" class object(type is S4), non-null
 ```{r, echo=TRUE}
-# window is vector of string format dates: window = c("1980-01-01", "2000-01-01")
-SUBSET = function(mtx, window) {
-  start_year = substr(window[1], start=1, stop=4)
-  end_year = substr(window[2], start=1, stop=4)
-  ts = matrix_to_ts(mtx, start_year, end_year)
-  return (window(ts, start=c(start_year, 1), end=c(end_year, 365)))
-}
-
-# sum of some values within a matrix
-SUM = function(m, window = c()) {
-  years = m$yrs
-  lb = as.Date(paste0(years[1], "-01-01"))
-  ub = as.Date(paste0(years[length(years)], "12-31"))
-  start = window[1]
-  end = window[2]
-  if (start < lb || end > ub) {
-    print("window input error!")
+Watershed = function(data, gridcode, shape) {
+  # check shape & gridcode
+  # (1) all inputs are correct
+  if (class(shape) == "SpatVector" && shape$gridcode == gridcode &&
+      is.numeric(gridcode) && gridcode %in% gridCodes){
+    obj = NULL
+    if (is.null(data)) {
+      mts = NULL
+    }
+    else if ((is.vector(data) || is.list(data) || is.data.frame(data))) {
+      mts = mts(data)
+    }
+    else {
+      stop("data is not of correct type!")
+      return ()
+    }
+    obj$mts = mts
+    obj$gridcode = gridcode
+    obj$shape = shape
+    class(obj) = "Watershed"
+    return (obj)
+    
+  }
+  else if (shape$gridcode != gridcode){
+    stop("gridcode mismatch shape!")
+    return ()
+  } 
+  else if (!is.numeric(gridcode)) {
+    stop("gridcode is not of correct type!")
+    return ()
+  }
+  else if (!gridcode %in% gridCodes) {
+    stop("such grid code does not exist!")
+    return ()
+  }
+  else {
+    stop("shape is not SpatVector object!")
     return ()
   }
   
-  sum = 0
-  for (i in (nrow(m))) {
-    sum = sum + sum(m[i,], na.rm = TRUE)
-  }
-  return (sum)
-}
+    
 
-# mean of some values within a matrix
-MEAN = function(m) {
-  return (SUM(m) / length(m))
-}
-
-# window sum
-windowSUM = function(m, window) {
-  return()
-}
-
-# window mean
-windowMEAN = function(m, window) {
-  return (windowSUM(m, window) / length())
-}
-
-
-# snow fraction(faster version)
-# input: Rdata file
-# return: (double) snow fraction
-snow_fraction = function(Rdata) {
-  snow = Rdata$snow_mat
-  rain = Rdata$rain_mat
-  snow_sum = 0
-  rain_sum = 0
   
-  # assume that snow & rain matrices have same dimensions
-  for (r in (1:nrow(snow))) {
-    for (c in (1:length(snow[1,]))) {
-      # NA issue(if one of them missing, ignore both)
-      if (!is.na(snow[r,c]) && !is.na(rain[r,c])) {
-        snow_sum = snow_sum + snow[r,c]
-        rain_sum = rain_sum + rain[r,c]
-      }
-
-    }
-  }
-  snow_ratio = snow_sum / (snow_sum + rain_sum)
-  return (snow_ratio)
 }
 
 
-# rain fraction(faster version)
-rain_fraction = function(Rdata) {
-  return (1 - snow_fraction(Rdata))
+```
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+ws1409 = Watershed(data1409, 1409, shapes[1368])
+end_time = Sys.time()
+end_time-start_time
+
+```
+
+
+
+
+
+
+
+
+
+
+
+=========================================================================================
+# TODO (under construction)
+# Arithmetic
+```{r, echo=TRUE}
+# snow fraction
+# input: Watershed object
+# return: snow_fraction(double)
+snow_fraction = function(ws) {
+  if (is.null(ws$mts)) {
+    return (NA)
+  }
+  else {
+    snow = ws$mts$snow
+    rain = ws$mts$rain
+    snow_sum = 0
+    rain_sum = 0
+    for (i in (1:length(snow))) {
+      s = snow[i]
+      r = rain[i]
+      # both snow and rain have to be non NA!
+      if (!is.na(s) && !is.na(r)) {
+        snow_sum = snow_sum + s
+        rain_sum = rain_sum + r
+      }
+    }
+    snow_ratio = snow_sum / (snow_sum + rain_sum)
+    return (snow_ratio)
+  }
+}
+
+# rain fraction
+# input: Watershed object
+rain_fraction = function(ws) {
+  return (1 - snow_fraction(ws))
 }
 
 ```
 
 
+```{r, echo=TRUE}
+start_time = Sys.time()
+snow_fraction(ws1409)
+end_time = Sys.time()
+end_time-start_time
+
+
+```
+
+
+# Archive
+
+<!-- ```{r, echo=TRUE} -->
+<!-- # snow fraction(faster version) -->
+<!-- # input: Rdata file -->
+<!-- # return: (double) snow fraction -->
+<!-- snow_fraction = function(Rdata) { -->
+<!--   snow = Rdata$snow_mat -->
+<!--   rain = Rdata$rain_mat -->
+<!--   snow_sum = 0 -->
+<!--   rain_sum = 0 -->
+
+<!--   # assume that snow & rain matrices have same dimensions -->
+<!--   for (r in (1:nrow(snow))) { -->
+<!--     for (c in (1:length(snow[1,]))) { -->
+<!--       # NA issue(if one of them missing, ignore both) -->
+<!--       if (!is.na(snow[r,c]) && !is.na(rain[r,c])) { -->
+<!--         snow_sum = snow_sum + snow[r,c] -->
+<!--         rain_sum = rain_sum + rain[r,c] -->
+<!--       } -->
+
+<!--     } -->
+<!--   } -->
+<!--   snow_ratio = snow_sum / (snow_sum + rain_sum) -->
+<!--   return (snow_ratio) -->
+<!-- } -->
+
+
+<!-- # rain fraction(faster version) -->
+<!-- rain_fraction = function(Rdata) { -->
+<!--   return (1 - snow_fraction(Rdata)) -->
+<!-- } -->
+
+<!-- ``` -->
 
 
 
@@ -259,19 +370,7 @@ rain_fraction = function(Rdata) {
 <!--   return (1 - snow_fraction(mts)) -->
 <!-- } -->
 
-
 <!-- ``` -->
-
-
-# test time for snow fraction
-```{r, echo=TRUE}
-start_time = Sys.time()
-snow_fraction(data1409)
-end_time = Sys.time()
-end_time - start_time
-
-
-```
 
 
 
@@ -289,73 +388,115 @@ end_time - start_time
 # TODO (under construction)
 # fetch summary
 ```{r, echo=TRUE}
-# input shape files, 
-# return grid codes(watershed No.) + snow fractions + rain fractions in data frame
-get_fraction = function(shapes) {
-
-  grid_codes = shapes$gridcode
-  snow_ratios = NULL
-  rain_ratios = NULL
-  for (i in (1:length(grid_codes))) {
-    filename = paste0(grid_codes[i], "_dat.RData")
-    # exception handling
-    if (!(filename %in% fileNames)) {
-      snow_ratios = c(snow_ratios, NA)
-      rain_ratios = c(rain_ratios, NA)
-    }
-    else {
-      data = mget(load(paste0(path, grid_codes[i], "_dat.RData")))
-      sr = snow_fraction(data)
-      rr = rain_fraction(data)
-      snow_ratios = c(snow_ratios, sr)
-      rain_ratios = c(rain_ratios, rr)
-    }
+# input: watersheds = list(ws1, ws2...) ws watershed object
+get_fraction = function(watersheds) {
+  snow_fraction = NULL
+  rain_fraction = NULL
+  gridcode = NULL
+  for (i in (1:length(watersheds))) {
+    ws = watersheds[[i]]
+    gridcode = c(gridcode, ws$gridcode)
+    snow_fraction = c(snow_fraction, snow_fraction(ws))
+    rain_fraction = c(rain_fraction, rain_fraction(ws))
+    
   }
-  return (data.frame(grid_codes, snow_ratios, rain_ratios))
-}
-
-
-
-render_piechart = function(shapes) {
-  df = get_fraction(shapes)
-  for (i in (1:(dim(df)[1]))) {
-    row = as.vector(as.numeric(df[i,]))
-    pie(row[-1], labels = c("snow fraction", "rain fraction"),
-        main = paste("watershed", as.character(row[1])))
-  }
-}
-
-
-get_ts_summary = function(shapes) {
+  return (data.frame(gridcode, snow_fraction, rain_fraction))
   
 }
 
+
 ```
 
-#test
 ```{r, echo=TRUE}
-# indices = c(1061, 1273, 1368) -> watershed file:(1003, 1013, 1409)
-get_fraction(shapes[c(1061,1273,1368)])
-render_piechart(shapes[c(1061,1273,1368)])
+start_time = Sys.time()
+get_fraction(watersheds = list(ws1409))
+end_time = Sys.time()
+end_time-start_time
+
 
 ```
 
+# Archive
+
+<!-- ```{r, echo=TRUE} -->
+<!-- get_fraction = function(shapes) { -->
+<!--   grid_codes = shapes$gridcode -->
+<!--   snow_ratios = NULL -->
+<!--   rain_ratios = NULL -->
+<!--   for (i in (1:length(grid_codes))) { -->
+<!--     filename = paste0(grid_codes[i], "_dat.RData") -->
+<!--     # exception handling -->
+<!--     if (!(filename %in% fileNames)) { -->
+<!--       snow_ratios = c(snow_ratios, NA) -->
+<!--       rain_ratios = c(rain_ratios, NA) -->
+<!--     } -->
+<!--     else { -->
+<!--       data = mget(load(paste0(path, grid_codes[i], "_dat.RData"))) -->
+<!--       sr = snow_fraction(data) -->
+<!--       rr = rain_fraction(data) -->
+<!--       snow_ratios = c(snow_ratios, sr) -->
+<!--       rain_ratios = c(rain_ratios, rr) -->
+<!--     } -->
+<!--   } -->
+<!--   return (data.frame(grid_codes, snow_ratios, rain_ratios)) -->
+<!-- } -->
+<!-- ``` -->
+
+
+<!-- #test -->
+<!-- ```{r, echo=TRUE} -->
+<!-- # indices = c(1061, 1273, 1368) -> watershed file:(1003, 1013, 1409) -->
+<!-- get_fraction(shapes[c(1061,1273,1368)]) -->
+<!-- render_piechart(shapes[c(1061,1273,1368)]) -->
+
+<!-- ``` -->
 
 
 
+
+```{r, echo=TRUE}
+load_watersheds = function(gridcodes) {
+  watersheds = list()
+  for (i in (1:length(gridcodes))) {
+    gc = gridcodes[i]
+    filename = paste0(gc, "_dat.RData")
+    if (!(filename %in% fileNames)) {
+      data = NULL
+    } else {
+      data = mget(load(paste0(path, gc, "_dat.RData")))
+    }
+    shape = shapes[which(shapes$gridcode == gc)]
+    ws = Watershed(data, gc, shape)
+    watersheds[[i]] = ws
+  }
+  return (watersheds)
+  
+}
+
+
+
+```
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+# load_watersheds(c(1003, 1013, 1409))
+ws_1_2_1409 = load_watersheds(c(1, 2, 1409))
+end_time = Sys.time()
+end_time-start_time
+```
 
 
 
 
 # TODO (under construction)
 # load any info about the watersheds/shapes
-```{r, echo}
-load_content = function(shapes, option) {
+```{r, echo = TRUE}
+load_content = function(watersheds, option) {
   content = NULL
-  for (i in (1:length(shapes))) {
+  for (i in (1:length(watersheds))) {
     switch(option,
       "fraction" = {
-        stats = get_fraction(shapes)
+        stats = get_fraction(watersheds)
         sr = stats[i,][2]
         rr = stats[i,][3]
         if (is.na(sr) || is.na(rr)) {
@@ -392,11 +533,9 @@ load_content = function(shapes, option) {
 ```{r, echo=TRUE}
 # shapes: a set of shape files, e.g., shp_dat[1:3];
 # map: boolean - TRUE puts boundaries on a map;
-plot_shape = function(shapes, map=TRUE, option="fraction") {
+plot_shape = function(shapes, content=NULL, map=TRUE, option="fraction") {
   # center_longs = shapes$Longitude
   # center_lats = shapes$Latitude
-  stats = get_fraction(shapes)
-  content = load_content(shapes, option = option)
   # list of x coord(longitude) of centroid
   center_longs = NULL
   # list of y coord(latitude) of centroid
@@ -426,15 +565,25 @@ plot_shape = function(shapes, map=TRUE, option="fraction") {
   }
 }
 
+
+
+plot_watersheds = function(watersheds, map = TRUE, option = "fraction") {
+  content = load_content(watersheds, option)
+  shapes = 
+  plot_shape(shapes, content, map, option)
+}
+
 ```
 
 #tests
 ```{r, echo=TRUE}
 # plot_shape(shapes[1:4], FALSE, "fraction")
-plot_shape(shapes[1:4], TRUE, "fraction")
+c1 = load_content(ws_1_2_1409)
+plot_shape(shapes[1:4], map=TRUE, "fraction")
 # plot_shape(shapes[c(1, 11, 101, 31, 77)], TRUE, "fraction")
-plot_shape(shapes[c(1061,1273,1368)], TRUE, "fraction")
-# plot_shape(shapes[c(1061,1273,1368)], FALSE, "fraction")
+# plot_shape(shapes[c(1061,1273,1368)], TRUE, "fraction")
+plot_shape(shapes[c(1061,1273,1368)], map=FALSE, "fraction")
+
 ```
 
 

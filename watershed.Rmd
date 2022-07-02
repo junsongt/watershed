@@ -32,19 +32,19 @@ source(file.choose())
 
 #========================================================================================# Global variables
 ```{r, echo=TRUE}
-path = "D:/NSERC/project/processedData/"
-fileNames = list.files(path)
+PATH = "D:/NSERC/project/processedData/"
+FILENAMES = list.files(PATH)
 
 # load shapes
-shapes = vect("D:/NSERC/project/WaterShedDataExample/ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
+SHAPES = vect("D:/NSERC/project/WaterShedDataExample/ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
 
 
 # shape_attr = st_read("D:/NSERC/project/WaterShedDataExample/ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
 
-shape_attr = read_sf("D:/NSERC/project/WaterShedDataExample/ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
+SHAPE_attr = read_sf("D:/NSERC/project/WaterShedDataExample/ToyData/Shape_Files/CANUS_Watershed_Boundaries.shp")
 
 # coordinates
-gridInfo = read.csv("D:/NSERC/project/WaterShedDataExample/GridInfo.csv", sep = ";")
+GRIDINFO = read.csv("D:/NSERC/project/WaterShedDataExample/GridInfo.csv", sep = ";")
 
 
 # given file path, return list of Rdata(cube)
@@ -70,22 +70,19 @@ readData = function(path) {
 
 # accessing shape file/Rdata file/grid code
 ```{r, echo=TRUE}
-gridCodes = gridInfo$gridcode
-# shapeIDs = NULL
-# for (i in (1:length(shapes))) {
-#   shapeIDs = c(shapeIDs, shapes[i]$gridcode)
-# }
+GRIDCODES = GRIDINFO$gridcode
 
-shapeIDs = shape_attr$gridcode
-length(gridCodes) == length(shapeIDs)
-length(gridCodes) == length(gridCodes == shapeIDs)
+
+shapeIDs = SHAPE_attr$gridcode
+length(GRIDCODES) == length(shapeIDs)
+length(GRIDCODES) == length(GRIDCODES == shapeIDs)
 # conclusion: gridInfo has the same order and length of shapes, in fact we can use gridInfo index to access single shape file in shapes
 
-l = shapes[[1]]
+l = SHAPES[[1]]
 # 1409 Rdata file and its corresponding shape file
-shape1409 = shapes[which(gridCodes == 1409)]
+shape1409 = SHAPES[which(GRIDCODES == 1409)]
 # 1409 Rdata file(list of matrices)
-data1409 = mget(load(paste0(path, "1409_dat.Rdata"))) 
+data1409 = mget(load(paste0(PATH, "1409_dat.Rdata"))) 
 ```
 
 
@@ -168,7 +165,7 @@ end_time - start_time
 attributes:
 # mts(snow, rain, temp, resp)
 # gridcode
-# shape object(could be null when initializing)
+# shapeID: shape object index
 
 
 method:
@@ -181,13 +178,13 @@ constructor input:
 #data: has to be in list form(data frame containing covariates), because it has to contain snow, rain, temp, resp
 # (i.e. RData, data frame), also could be null
 # gridcode has to be integer, non-null
-# shape has to be "SpatVector" class object(type is S4), non-null
+# index has to be integer, non-null
 ```{r, echo=TRUE}
-Watershed = function(data, gridcode, shape) {
+Watershed = function(data, gridcode, index) {
   # check shape & gridcode
   # (1) all inputs are correct
-  if (class(shape) == "SpatVector" && shape$gridcode == gridcode &&
-      is.numeric(gridcode) && gridcode %in% gridCodes){
+  shape = SHAPES[index]
+  if (shape$gridcode == gridcode && is.numeric(gridcode) && gridcode %in% GRIDCODES){
     obj = NULL
     if (is.null(data)) {
       mts = NULL
@@ -201,7 +198,7 @@ Watershed = function(data, gridcode, shape) {
     }
     obj$mts = mts
     obj$gridcode = gridcode
-    obj$shape = shape
+    obj$shapeID = index
     class(obj) = "Watershed"
     return (obj)
     
@@ -214,17 +211,10 @@ Watershed = function(data, gridcode, shape) {
     stop("gridcode is not of correct type!")
     return ()
   }
-  else if (!gridcode %in% gridCodes) {
+  else {
     stop("such grid code does not exist!")
     return ()
   }
-  else {
-    stop("shape is not SpatVector object!")
-    return ()
-  }
-  
-    
-
   
 }
 
@@ -234,7 +224,7 @@ Watershed = function(data, gridcode, shape) {
 
 ```{r, echo=TRUE}
 start_time = Sys.time()
-ws1409 = Watershed(data1409, 1409, shapes[1368])
+ws1409 = Watershed(data1409, 1409, 1368)
 end_time = Sys.time()
 end_time-start_time
 
@@ -299,87 +289,6 @@ end_time-start_time
 ```
 
 
-# Archive
-
-<!-- ```{r, echo=TRUE} -->
-<!-- # snow fraction(faster version) -->
-<!-- # input: Rdata file -->
-<!-- # return: (double) snow fraction -->
-<!-- snow_fraction = function(Rdata) { -->
-<!--   snow = Rdata$snow_mat -->
-<!--   rain = Rdata$rain_mat -->
-<!--   snow_sum = 0 -->
-<!--   rain_sum = 0 -->
-
-<!--   # assume that snow & rain matrices have same dimensions -->
-<!--   for (r in (1:nrow(snow))) { -->
-<!--     for (c in (1:length(snow[1,]))) { -->
-<!--       # NA issue(if one of them missing, ignore both) -->
-<!--       if (!is.na(snow[r,c]) && !is.na(rain[r,c])) { -->
-<!--         snow_sum = snow_sum + snow[r,c] -->
-<!--         rain_sum = rain_sum + rain[r,c] -->
-<!--       } -->
-
-<!--     } -->
-<!--   } -->
-<!--   snow_ratio = snow_sum / (snow_sum + rain_sum) -->
-<!--   return (snow_ratio) -->
-<!-- } -->
-
-
-<!-- # rain fraction(faster version) -->
-<!-- rain_fraction = function(Rdata) { -->
-<!--   return (1 - snow_fraction(Rdata)) -->
-<!-- } -->
-
-<!-- ``` -->
-
-
-
-<!-- # snow fraction & rain fraction on mts object -->
-<!-- ```{r, echo=TRUE} -->
-<!-- # A multivariate time series including univariate time series named "rain" and "snow" -->
-<!-- # Returns the snow fraction, i.e., total snow / (total rain + total snow). -->
-<!-- # Any time with missing rain or snow or both is ignored. -->
-
-
-<!-- # mts is usually a data frame with col: -->
-<!-- # Time snow_mat rain_mat -->
-<!-- snow_fraction = function(mts) { -->
-<!--   snow = mts$snow_mat -->
-<!--   rain = mts$rain_mat -->
-<!--   snow_sum = 0 -->
-<!--   rain_sum = 0 -->
-
-<!--   # assume that snow & rain matrices have same lengths -->
-<!--   for (i in (1:length(snow))) { -->
-<!--     # NA issue -->
-<!--     if (!is.na(snow[i]) && !is.na(rain[i])) { -->
-<!--       snow_sum = snow_sum + snow[i] -->
-<!--       rain_sum = rain_sum + rain[i] -->
-<!--     } -->
-<!--   } -->
-
-<!--   snow_ratio = snow_sum / (snow_sum + rain_sum) -->
-<!--   return (snow_ratio) -->
-<!-- } -->
-
-
-<!-- #rain fraction -->
-<!-- rain_fraction = function(mts) { -->
-<!--   return (1 - snow_fraction(mts)) -->
-<!-- } -->
-
-<!-- ``` -->
-
-
-
-
-
-
-
-
-
 
 
 #========================================================================================
@@ -393,12 +302,10 @@ get_fraction = function(watersheds) {
   snow_fraction = NULL
   rain_fraction = NULL
   gridcode = NULL
-  for (i in (1:length(watersheds))) {
-    ws = watersheds[[i]]
+  for (ws in watersheds) {
     gridcode = c(gridcode, ws$gridcode)
     snow_fraction = c(snow_fraction, snow_fraction(ws))
     rain_fraction = c(rain_fraction, rain_fraction(ws))
-    
   }
   return (data.frame(gridcode, snow_fraction, rain_fraction))
   
@@ -455,18 +362,19 @@ end_time-start_time
 
 
 ```{r, echo=TRUE}
+# gridcodes: vector of gridcode, i.e.c(1003, 1013, 1409), c(1,10,1001,1409)
 load_watersheds = function(gridcodes) {
   watersheds = list()
   for (i in (1:length(gridcodes))) {
     gc = gridcodes[i]
     filename = paste0(gc, "_dat.RData")
-    if (!(filename %in% fileNames)) {
+    if (!(filename %in% FILENAMES)) {
       data = NULL
     } else {
-      data = mget(load(paste0(path, gc, "_dat.RData")))
+      data = mget(load(paste0(PATH, filename)))
     }
-    shape = shapes[which(shapes$gridcode == gc)]
-    ws = Watershed(data, gc, shape)
+    index = which(SHAPES$gridcode == gc)
+    ws = Watershed(data, gc, index)
     watersheds[[i]] = ws
   }
   return (watersheds)
@@ -491,36 +399,50 @@ end_time-start_time
 # TODO (under construction)
 # load any info about the watersheds/shapes
 ```{r, echo = TRUE}
-load_content = function(watersheds, option) {
+# input: list of Watershed object
+# return: content => list of HTML string
+show_fraction = function(watersheds) {
   content = NULL
   for (i in (1:length(watersheds))) {
-    switch(option,
-      "fraction" = {
-        stats = get_fraction(watersheds)
-        sr = stats[i,][2]
-        rr = stats[i,][3]
-        if (is.na(sr) || is.na(rr)) {
-          content = c(content, paste0("<br>watershed:", stats[i,][1], 
-                                      "<br>snow fraction:", stats[i,][2],
-                                      "<br>rain fraction:", stats[i,][3]))
-        } else {
-          content = c(content, paste0("<br>watershed:", stats[i,][1], 
-                                      "<br>snow fraction:", round(stats[i,][2],2)*100,"%",
-                                      "<br>rain fraction:", round(stats[i,][3],2)*100,"%"))
-        }
-        
-      },
-      "summary" = {
-        
-        
-      },
-      "piechart" = {
-        
-      }
-    )
-    
-    
+    stats = get_fraction(watersheds)
+    sr = stats[i,][2]
+    rr = stats[i,][3]
+    if (is.na(sr) || is.na(rr)) {
+      content = c(content, paste0("<br>watershed:", stats[i,][1], 
+                                  "<br>snow fraction:", stats[i,][2],
+                                  "<br>rain fraction:", stats[i,][3]))
+    } else {
+      content = c(content, paste0("<br>watershed:", stats[i,][1], 
+                                  "<br>snow fraction:", round(stats[i,][2],2)*100,"%",
+                                  "<br>rain fraction:", round(stats[i,][3],2)*100,"%"))
+    }
   }
+  return (content)
+}
+
+# input: list of Watershed object
+# return: content => list of HTML string
+show_summary = function(watersheds) {
+  summary = NULL
+  
+  return (summary)
+}
+
+# input: list of Watershed object
+# return: content => list of HTML plot
+show_plot = function(watersheds, option) {
+  plot = NULL
+  
+  return (plot)
+}
+
+load_content = function(watersheds, option) {
+  content = NULL
+  switch(option,
+         "fraction" = {content = show_fraction(watersheds)},
+         "summary" = {content = show_summary(watersheds)},
+         "piechart" = {content = show_plot(watersheds)}
+  )
   return (content)
   
 }
@@ -531,7 +453,8 @@ load_content = function(watersheds, option) {
 # TODO (under construction)
 # plot watersheds's boundaries(shapes)
 ```{r, echo=TRUE}
-# shapes: a set of shape files, e.g., shp_dat[1:3];
+# shapes: a set of shape objects, e.g., shp_dat[1:3];
+# content: 
 # map: boolean - TRUE puts boundaries on a map;
 plot_shape = function(shapes, content=NULL, map=TRUE, option="fraction") {
   # center_longs = shapes$Longitude
@@ -566,10 +489,11 @@ plot_shape = function(shapes, content=NULL, map=TRUE, option="fraction") {
 }
 
 
-
+# watersheds: list of watershed objects
 plot_watersheds = function(watersheds, map = TRUE, option = "fraction") {
   content = load_content(watersheds, option)
-  shapes = 
+  indices = sapply(watersheds, FUN=function(ws){ws$shapeID})
+  shapes = SHAPES[indices]
   plot_shape(shapes, content, map, option)
 }
 
@@ -577,12 +501,15 @@ plot_watersheds = function(watersheds, map = TRUE, option = "fraction") {
 
 #tests
 ```{r, echo=TRUE}
-# plot_shape(shapes[1:4], FALSE, "fraction")
-c1 = load_content(ws_1_2_1409)
-plot_shape(shapes[1:4], map=TRUE, "fraction")
-# plot_shape(shapes[c(1, 11, 101, 31, 77)], TRUE, "fraction")
-# plot_shape(shapes[c(1061,1273,1368)], TRUE, "fraction")
-plot_shape(shapes[c(1061,1273,1368)], map=FALSE, "fraction")
+# plot_shape(SHAPES[1:4], FALSE, "fraction")
+# c1 = load_content(ws_1_2_1409,option = "fraction")
+plot_shape(SHAPES[1:4], map=TRUE, "fraction")
+# plot_shape(SHAPES[c(1, 11, 101, 31, 77)], TRUE, "fraction")
+plot_shape(SHAPES[c(1061,1273,1368)], map=TRUE, "fraction")
+# plot_shape(SHAPES[c(1061,1273,1368)], map=FALSE, "fraction")
+
+plot_watersheds(watersheds=load_watersheds(c(1003,1013,1409)), map=TRUE)
+
 
 ```
 
@@ -641,10 +568,10 @@ inside_region = function(shape, long_min, long_max, lat_min, lat_max) {
 
 #tests
 ```{r, echo=TRUE}
-plot_shape(shapes[1], FALSE)
+plot_shape(SHAPES[1], FALSE)
 start_time = Sys.time()
-inside_region(shapes[1], -132, -125, 57, 59.5)
-inside_region(shapes[1], -133, -126, 57, 59.5)
+inside_region(SHAPES[1], -132, -125, 57, 59.5)
+inside_region(SHAPES[1], -133, -126, 57, 59.5)
 end_time = Sys.time()
 end_time - start_time
 
@@ -678,8 +605,8 @@ in_which_region = function(shapes, long, lat) {
 
 #tests
 ```{r, echo=TRUE}
-plot_shape(shapes[1:4], FALSE)
-in_which_region(shapes[1:4], long = -125, lat = 55.1)
+plot_shape(SHAPES[1:4], FALSE)
+in_which_region(SHAPES[1:4], long = -125, lat = 55.1)
 ```
 
 
@@ -711,10 +638,10 @@ in_which_region(shapes[1:4], long = -125, lat = 55.1)
 # ext(shapes[1:2]) is "SpatExtent" object
 # box is "SpatRaster" object
 # Http error 404 can be solved by giving different online map provider
-box = get_tiles(x = ext(shapes[1:3]), provider = "Esri.WorldStreetMap")
+box = get_tiles(x = ext(SHAPES[1:3]), provider = "Esri.WorldStreetMap")
 plotRGB(box)
-lines(shapes[1:3], col = "blue")
-lines(ext(shapes[1:3]))
+lines(SHAPES[1:3], col = "blue")
+lines(ext(SHAPES[1:3]))
 
 
 ```

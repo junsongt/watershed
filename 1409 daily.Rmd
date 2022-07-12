@@ -625,7 +625,7 @@ end_time - start_time
 
 #seasonality
 ```{r, echo=TRUE}
-# s = loess(y ~ x, data=df, degree=2, family="symmetric", method="loess", control =loess.control(iterations = 5))
+# s = loess(y ~ x, data=df, degree=2, family="symmetric", method="loess", control =loess.control(iterations = 4))
 # # j <- order(df$x)
 # # plot(df$y ~ df$x)
 # # lines(df$x[j], s$fitted[j], col="green")
@@ -664,7 +664,7 @@ seasonal = function(ts, deg=2, span=0.75, iter=4) {
     x = c(x, rep(i, length(cluster)))
     y = c(y, cluster)
     # set up marker such that it represents the pos that we should extract the fitted value 
-    z = c(z, TRUE, rep(FALSE, length(cluster-1)))
+    z = c(z, TRUE, rep(FALSE, length(cluster)-1))
 
   }
   # df = data.frame(x, y)
@@ -683,9 +683,10 @@ seasonal = function(ts, deg=2, span=0.75, iter=4) {
 
 
 
+
 ```{r, echo=TRUE}
 start_time = Sys.time()
-s3 = seasonal(ts1409, span = 1/30)
+s3 = seasonal(ts1409, span=1/30)
 end_time = Sys.time()
 end_time - start_time
 plot(df$y ~ df$x, col = "green", main = "one full period")

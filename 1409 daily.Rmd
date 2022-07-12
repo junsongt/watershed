@@ -86,33 +86,33 @@ daily = daily_frame(data1409)
 daily[is.na(daily$resp),]
 
 # subset of log-daily from 1980.1 - 1994.12(15 years)
-daily_ts = ts(log(daily$resp), start=c(1980,1), frequency = 365)
-plot(daily_ts)
-acf(daily_ts, lag.max = 365*5, main = "acf of daily response", na.action = na.pass)
-pacf(daily_ts, lag.max = 365*5, main = "pacf of daily respoonse", na.action = na.pass)
+ts1409 = ts(log(daily$resp), start=c(1980,1), frequency = 365)
+plot(ts1409)
+acf(ts1409, lag.max = 365*5, main = "acf of daily response", na.action = na.pass)
+pacf(ts1409, lag.max = 365*5, main = "pacf of daily respoonse", na.action = na.pass)
 
-# train set 12 years, test set 3 years
-daily_train = window(daily_ts, start=c(1980,1), end=c(1991,365))
-daily_test = window(daily_ts, start=c(1992,1), end=c(1994,365))
+# # train set 12 years, test set 3 years
+# daily_train = window(daily_ts, start=c(1980,1), end=c(1991,365))
+# daily_test = window(daily_ts, start=c(1992,1), end=c(1994,365))
 
 
-plot(daily_train, col="red", xlim = c(1980, 1995), main="Train & Test")
-lines(daily_test, col="blue")
+# plot(daily_train, col="red", xlim = c(1980, 1995), main="Train & Test")
+# lines(daily_test, col="blue")
 ```
 
 
 
 
 #========================================================================================
-# Loess decomposition
+# STL decomposition
 ```{r echo=TRUE}
-# loess = stlplus(daily_train, s.window = "periodic", s.degree = 2)
-na.new = function(x) {ts(na.exclude(x), start = c(1980,1), frequency = 365)}
-loess = stl(daily_ts, s.window = "periodic", na.action = na.new)
-plot(loess)
+# stl_obj = stlplus(daily_train, s.window = "periodic", s.degree = 2)
+na.new = function(x) {ts(zoo::na.approx(x), start = c(1980,1), frequency = 365)}
+stl_obj = stl(ts1409, s.window = "periodic", na.action = na.new)
+plot(stl_obj)
 # check residuals
 # daily_ts has length 13870; while residual has 13398, probably due to NAs in raw ts.
-error = loess$time.series[,"remainder"]
+error = stl_obj$time.series[,"remainder"]
 qqnorm(error)
 qqline(error)
 acf(error, lag.max= 365*5, main="acf of residual")
@@ -124,6 +124,9 @@ model = arima(error, order = c(5,0,0), include.mean = TRUE)
 acf(model$residuals)
 pacf(model$residuals, lag.max = 365)
 tsdiag(model)
+qqnorm(model$residuals)
+qqline(model$residuals)
+hist(model$residuals)
 
 # #de-seasonalize
 # daily.train.ds = daily_train - loess$time.series[,"seasonal"]
@@ -218,7 +221,7 @@ same_day_cluster = function(ts, trim=0) {
 #run time test
 ```{r, echo=TRUE}
 start_time = Sys.time()
-m = same_day_cluster(daily_ts, trim=0)
+m = same_day_cluster(ts1409, trim=0)
 end_time = Sys.time()
 end_time - start_time
 
@@ -281,72 +284,7 @@ seasonality = function(ts, window, degree, trim) {
   
   return (seasonality)
 }
-
-
-
 ```
-
-
-
-
-<!-- (5) Least absolute deviations(LAD) regression -->
-<!-- ```{r, echo=TRUE} -->
-<!-- seasonality5 = function(ts, window, degree) { -->
-<!--   # number of years -->
-<!--   k = floor(tsp(ts)[2]-tsp(ts)[1])+1 -->
-<!--   freq = as.integer(tsp(ts)[3]) -->
-
-<!--   equi_class = same_day_cluster(ts, trim=FALSE) -->
-<!--   n = length(equi_class[[1]]) -->
-
-<!--   seasonality = NULL -->
-<!--   for (i in (1:freq)) { -->
-<!--     # [-w+i,..i,...w+i] -->
-<!--     interval = seq(from=-window+i, to=window+i, by=1) -->
-<!--     y = NULL -->
-<!--     x = NULL -->
-<!--     for (w in interval) { -->
-<!--       if (w < 1) { -->
-<!--         cluster = (equi_class[[w+freq]])[-n] -->
-<!--       } -->
-<!--       else if (w > freq) { -->
-<!--         cluster = (equi_class[[w-freq]])[-1] -->
-<!--       } -->
-<!--       else { -->
-<!--         cluster = equi_class[[w]] -->
-<!--       } -->
-
-<!--       cluster = cluster[!is.na(cluster)] -->
-
-<!--       y = c(y, cluster) -->
-<!--       x = c(x, rep(w-i, length(cluster))) -->
-<!--     } -->
-
-<!--     if (degree == 0) { -->
-<!--       yhat = median(y) -->
-<!--     } -->
-<!--     if (degree == 1) { -->
-<!--       model = lad(y ~ x) -->
-<!--       yhat = as.numeric(model$fitted.values[which(x==0)][1]) -->
-<!--     } -->
-<!--     if (degree == 2) { -->
-<!--       model = lad(y ~ x+I(x^2)) -->
-<!--       yhat = as.numeric(model$fitted.values[which(x==0)][1]) -->
-<!--     } -->
-<!--     if (degree == 3) { -->
-<!--       model = lad(y ~ x+I(x^2)+I(x^3)) -->
-<!--       yhat = as.numeric(model$fitted.values[which(x==0)][1]) -->
-<!--     } -->
-
-<!--     slots = seq(from=i, to=i+(k-1)*freq, by=freq) -->
-<!--     seasonality[slots] = yhat -->
-<!--   } -->
-
-<!--   return (seasonality) -->
-<!-- } -->
-
-
-<!-- ``` -->
 
 
 # run time test using 2nd version
@@ -355,7 +293,7 @@ seasonality = function(ts, window, degree, trim) {
 ```{r, echo=TRUE}
 start_time = Sys.time()
 # keep the outliers
-s1 = seasonality(daily_ts, window = 51, degree = 2, trim=0)
+s1 = seasonality(ts1409, window = 51, degree = 2, trim=0)
 end_time = Sys.time()
 end_time - start_time
 
@@ -364,7 +302,7 @@ end_time - start_time
 ```{r, echo=TRUE}
 start_time = Sys.time()
 # remove the outliers
-s2 = seasonality(daily_ts, window = 51, degree = 2, trim=0.25)
+s2 = seasonality(ts1409, window = 51, degree = 2, trim=0.25)
 end_time = Sys.time()
 end_time - start_time
 
@@ -379,6 +317,8 @@ end_time - start_time
 ```{r, echo=TRUE}
 plot(s1, type ="l", xlim = c(0,1000), col = "black", main="s1&s2: with/without outliers")
 lines(s2, type = "l", xlim = c(0,1000), col = "red")
+legend("bottomright",legend=c("outlier","no outlier"), lty=1,
+       col=c("black","red"))
 
 
 ```
@@ -459,31 +399,32 @@ bestSeason = function(ts, window.max = 10, trim_per.max = 0.25) {
 ```{r, echo=TRUE}
 # long runtime!!!
 start_time = Sys.time()
-bestSeason(daily_ts, window.max = 11, trim_per.max = 0.25)
+bestSeason(ts1409, window.max = 11, trim_per.max = 0.25)
 end_time = Sys.time()
 end_time - start_time
 ```
-
-
-
-
-
 
 
 ```{r, echo=TRUE}
 start_time = Sys.time()
-bestSeason(daily_ts, window.max = 10, trim_per.max = 0)
+bestSeason(ts1409, window.max = 10, trim_per.max = 0)
 end_time = Sys.time()
 end_time - start_time
 
 ```
 
 
-
+# test
 ```{r, echo=TRUE}
-best_seasonal = seasonality(daily_ts, window=11, degree=0, trim=0.05)
-plot(ts(best_seasonal, start=c(1980,1), frequency=365), xlim=c(1980,2000),ylim=c(-5,5), type="l", main="best seasonality(11, 0, 5%) & raw ts")
-lines(daily_ts, col = "green")
+start_time = Sys.time()
+best_seasonal = seasonality(ts1409, window=11, degree=0, trim=0.05)
+end_time = Sys.time()
+end_time - start_time
+plot(ts1409, col = "green", xlim=c(1980,2000), ylim=c(-5,5), type="l", main="best seasonality(11, 0, 5%) & raw ts")
+lines(ts(best_seasonal, start=c(1980,1), frequency=365),col = "blue")
+lines(loess$time.series[,"seasonal"], col = "red")
+legend("bottomright",legend=c("ts","mine", "stl"), lty=1,
+       col=c("green","blue","red"))
 
 # remain = daily_ts - best_seasonal
 # obj = stl(remain, s.window = "periodic", na.action = na.pass)
@@ -494,28 +435,120 @@ lines(daily_ts, col = "green")
 
 
 
-<!-- # package: parallel -->
-<!-- ```{r, echo=TRUE} -->
-<!-- library(parallel) -->
-<!-- library(pbapply) -->
-
-<!-- l <- list(a = c(1,2), b = c(1,2,3))                                 # example list -->
-<!-- f <- function(x){return(length(x))}                           # example function -->
-
-<!-- n_cores <- detectCores()                                          # determine number of cores -->
-<!-- cl <- makeCluster(n_cores - 1)                                 # use all (except for 1) cores and start cluster -->
-
-<!-- pblapply(l, f, cl = cl)                                                    # use pblapply instead of lapply -->
-
-<!-- stopCluster(cl)                                                            # stop cluster -->
-
-
-
-<!-- ``` -->
 
 
 
 
+#===========================================================================================
+Trend
+
+(1) moving average over period(center at t=183)
+```{r, echo=TRUE}
+MA.smooth = function(x, lag) {
+  n = length(x)
+  result = NULL
+  for (i in (1:(n-lag))) {
+    avg = mean(x[i:(i+lag)], na.rm = TRUE)
+    result = c(result, avg)
+  }
+  return (result)
+}
+
+
+trend = function(ts) {
+  freq = as.integer(tsp(ts)[3])
+  n = length(ts)
+  
+  trend = NULL
+  final_trend = rep(NA, n)
+  # freq=5, w=2, freq=4, w=1.5
+  window  = (freq-1) / 2
+  # if freq = odd
+  if (freq %% 2 != 0) {
+    trend = MA.smooth(ts, lag=2*window)
+    # padding head & tail
+    final_trend[(window+1):(n-window)] = trend
+  }
+  else {
+    temp = MA.smooth(ts, lag=2*window)
+    trend = MA.smooth(temp, lag = 1)
+    # padding head & tail
+    w = window + 0.5
+    final_trend[(w+1):(n-w)] = trend
+  }
+  
+  return (final_trend)
+  
+}
+
+
+```
+
+
+# test
+```{r, echo=TRUE}
+start_time = Sys.time()
+t1 = trend(ts1409)
+end_time = Sys.time()
+end_time - start_time
+plot(ts1409, ylim = c(-5,5), type = "l", col = "green", main="trend in ts")
+lines(ts(t1, start = c(1980,1), frequency = 365), col = "blue")
+lines(stl_obj$time.series[,"trend"], col = "red")
+legend("bottomright",legend=c("ts","mine", "stl"), lty=1,
+       col=c("green","blue","red"))
+```
+
+
+
+
+```{r, echo=TRUE}
+res = ts1409 - best_seasonal - t1
+
+qqnorm(res)
+qqline(res)
+par(mar=c(5,4,4,2)+0.1)
+acf(res[!is.na(res)], lag.max= 365*5, main="acf of residual")
+pacf(res[!is.na(res)], lag.max = 365*3, main="pacf of residual")
+pacf(res[!is.na(res)], main="pacf of residual")
+
+
+# model = arima(res, order = c(5,0,0), include.mean = TRUE)
+# acf(model$residuals)
+# pacf(model$residuals, lag.max = 365)
+tsdiag(arima(res[!is.na(res)], order = c(5,0,0), include.mean = TRUE))
+
+hist(error, main="residual by stl")
+
+
+```
+
+# remove seasonality ---> remove trend
+```{r, echo=TRUE}
+ts_ds = ts1409 - s1
+r1 = ts_ds - trend(ts_ds)
+plot(r1, ylim = c(-5,5))
+qqnorm(r1)
+qqline(r1)
+
+
+```
+
+# remove trend ---> remove seasonality
+```{r, echo=TRUE}
+ts_dt = ts1409 - trend(ts1409)
+r2 = ts_dt - seasonality(ts_dt, window=11, degree = 0, trim=0.05)
+plot(r2, ylim = c(-5,5))
+qqnorm(r2)
+qqline(r2)
+
+
+```
+
+```{r, echo=TRUE}
+hist(r1)
+hist(r2)
+
+```
 
 
 
@@ -530,16 +563,287 @@ lines(daily_ts, col = "green")
 
 
 
+#===========================================================================================
+#loess method
+
+#preparation
+```{r, echo=TRUE}
+# NA removal version
+same_day_frame = function(ts) {
+  # number of years
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
+  freq = as.integer(tsp(ts)[3])
+
+  x = NULL
+  y = NULL
+  for (i in (1:freq)) {
+    indices = seq(from=i, to=i+(k-1)*freq, by=freq)
+    cluster = ts[indices]
+    # clear out NA
+    cluster = cluster[!is.na(cluster)]
+
+    x = c(x, rep(i, length(cluster)))
+    y = c(y, cluster)
+    
+  }
+  df = data.frame(x, y)
+  return (df)
+}
+
+## NA kept version
+# same_day_frame = function(ts) {
+#   # number of years
+#   k = floor(tsp(ts)[2]-tsp(ts)[1])+1
+#   freq = as.integer(tsp(ts)[3])
+#   
+#   m = matrix(ts, byrow = TRUE, nrow=k)
+#   x = rep(1:freq, each = length(m[,1]))
+#   y = as.vector(m)
+#   return (data.frame(x, y))
+# }
+
+
+```
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+df = same_day_frame(ts1409)
+end_time = Sys.time()
+end_time - start_time
+
+
+```
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+s = loess(y ~ x, data=df, degree=2, family="symmetric", method="loess", control =loess.control(iterations = 5))
+end_time = Sys.time()
+end_time - start_time
+
+
+```
+
+#seasonality
+```{r, echo=TRUE}
+# s = loess(y ~ x, data=df, degree=2, family="symmetric", method="loess", control =loess.control(iterations = 5))
+# # j <- order(df$x)
+# # plot(df$y ~ df$x)
+# # lines(df$x[j], s$fitted[j], col="green")
+# fitted_frame = data.frame(df$x, s$fitted)
+# names(fitted_frame) = c("x", "fitted")
+# 
+# count = 1
+# fitted = NULL
+# for (i in (1:length(fitted_frame$x))) {
+#   if (fitted_frame$x[i] == count && count <= 365) {
+#     fitted = c(fitted, fitted_frame$fitted[i])
+#     count = count + 1
+#   }
+# }
+# plot(df$y ~ df$x)
+# lines(seq(from=1, to=365, by=1), fitted, col="green")
+# plot(best_seasonal[1:365], type = "l", xlim = c(0, 365), ylim = c(-5, 2))
+# lines(fitted, col = "red")
+
+```
+
+
+```{r, echo=TRUE}
+seasonal = function(ts, deg=2, span=0.75, iter=4) {
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
+  freq = as.integer(tsp(ts)[3])
+  # form data frame
+  x = NULL
+  y = NULL
+  z = NULL
+  for (i in (1:freq)) {
+    indices = seq(from=i, to=i+(k-1)*freq, by=freq)
+    cluster = ts[indices]
+    # clear out NA
+    cluster = cluster[!is.na(cluster)]
+    x = c(x, rep(i, length(cluster)))
+    y = c(y, cluster)
+    # set up marker such that it represents the pos that we should extract the fitted value 
+    z = c(z, TRUE, rep(FALSE, length(cluster-1)))
+
+  }
+  # df = data.frame(x, y)
+
+  loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control =loess.control(iterations=iter))
+  
+  full_period = loess_obj$fitted[which(z==TRUE)]
+  seasonality = rep(full_period, k)
+  
+  return (seasonality)
+}
+
+
+
+```
+
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+s3 = seasonal(ts1409, span = 1/30)
+end_time = Sys.time()
+end_time - start_time
+plot(df$y ~ df$x, col = "green", main = "one full period")
+lines(best_seasonal[1:365], col = "red")
+lines(s3[1:365], col = "blue")
+legend("topright",legend=c("ts","loess", "mine"), lty=1,
+       col=c("green","blue","red"))
+```
+
+```{r, echo=TRUE}
+plot(ts1409, type="l", xlim = c(1980,1982), ylim=c(-3,3), col="green")
+lines(ts(s3, start=c(1980,1), frequency = 365), col="blue")
+lines(ts(best_seasonal, start=c(1980,1), frequency = 365), col="red")
+```
+
+#CV
+```{r, echo=TRUE}
+best_season = function(ts, d.max, s.max) {
+  start_year = tsp(ts)[1]
+  end_year = tsp(ts)[2]
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1 #k = 38 years
+  t = ceiling(k/5) #t = 8 years/unit
+  freq = as.integer(tsp(ts)[3])
+  minSMSR = Inf
+
+  best_degree = 0
+  best_span = 1*0.05
+  
+  for (d in (0:d.max)) {
+    for (s in (1:(s.max/0.05))) {
+      # sum of mean squared error over CVs
+      SMSR = 0
+      # run 5 times CV
+      for (i in (1:5)) {
+        test_index = seq(from=1+(i-1)*t*freq, to=min(i*t*freq, k*freq), by=1)
+        test = ts[test_index]
+        test = ts(test, start=c(start_year+(i-1)*t, 1), frequency = freq)
+        
+        train = ts[-test_index]
+        train = ts(train, start=c(start_year, 1), frequency = freq)
+        seasonality = seasonal(train, deg=d, span=s*0.05)
+        
+        
+        pred = seasonality[1:length(test)]
+        residual = (test - pred)
+        SMSR = SMSR + mean(residual^2, na.rm = TRUE)
+      }
+      
+      if (SMSR < minSMSR) {
+        best_degree = d
+        best_span = s*0.05
+        minSMSR = SMSR
+      }
+    }
+  }
+  
+  return (data.frame(best_degree, best_span))
+}
+
+
+
+```
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+best_season(ts1409, d.max=2, s.max=0.5)
+end_time = Sys.time()
+end_time - start_time
+
+```
 
 
 
 
 
 
+#trend
+```{r, echo=TRUE}
+trend.loess = function(ts, deg=2, span=0.75, iter=4) {
+  trend = NULL
+  # 1st cursor, controling pos in whole ts
+  start_pos = 1
+  while (start_pos <= length(ts)) {
+    x = NULL
+    y = NULL
+    # 2nd cursor, controling accumulating consecutive non-NA
+    i = start_pos
+    while (!is.na(ts[i])) {
+      y = c(y, ts[i])
+      x = c(x, i)
+      i = i + 1
+    }
+    # first time meets NA after consecutive strings of non-NA
+    if (!is.null(y) && length(y) >= 100) {
+      loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control =loess.control(iterations=iter))
+      trend = c(trend, loess_obj$fitted)
+      trend = c(trend, NA)
+    } # consecutive NAs
+    else {
+      trend = c(trend, NA)
+    }
+  
+    start_pos = i + 1
+  }
+  
+  return (trend)
+}
 
 
 
+```
 
+
+```{r, echo=TRUE}
+# ts1409_ds = ts1409 - ts(seasonal(ts1409, span=0.5, deg=2), start = c(1980,1), frequency = 365)
+start_time = Sys.time()
+t2 = trend.loess(ts1409, span=1/6)
+end_time = Sys.time()
+end_time - start_time
+
+ts1409_dt = ts1409 - ts(t2, start=c(1980,1), frequency = 365)
+s4 = ts(seasonal(ts1409_dt, span=1/6), start=c(1980,1), frequency = 365)
+
+plot(ts1409, type="l", col="green", ylim=c(-5,5))
+# lines(ts(t1, start = c(1980,1), frequency = 365), col="red")
+# lines(ts(t2, start = c(1980,1), frequency = 365), col="blue")
+lines(s4, col = "red")
+lines(ts(best_seasonal, start=c(1980,1), frequency = 365), col="blue")
+
+```
+
+
+
+alternate season & trend
+
+$$X - s_1 = t_1 + \epsilon$$
+$$X - t_1 = s_2 + \epsilon$$
+$$X - s_2 = t_2 + \epsilon$$
+$$\ldots$$
+$$X - s_{n-1} = t_{n-1} + \epsilon$$
+$$X - t_{n-1} = s_n + \epsilon$$
+$$X - S_n = t_n + \epsilon$$
+
+
+```{r, echo=TRUE}
+s1 = seasonality()
+while (rmse(s1-s2) < 1e-05) {
+  
+}
+
+
+```
+
+
+relative error = sum(r_old^2) - sum(r_new^2)/ sum(r_new^2)
+
+do while(sum(r_old^2) - sum(r_new^2) < 1 - relative error)
 
 
 
@@ -577,21 +881,6 @@ lines(daily_ts, col = "green")
 
 <!-- ``` -->
 
-# ARIMA(5,0,0) model fitting
-```{r, echo=TRUE}
-arima_model = arima(error, order = c(5,0,0), include.mean = TRUE)
-plot(arima_model$residuals)
-acf(arima_model$residuals)
-pacf(arima_model$residuals, lag.max = 365)
-tsdiag(arima_model)
-qqnorm(arima_model$residuals)
-qqline(arima_model$residuals)
-
-```
-
-
-
-
 
 
 # Box-Jenkins Forecast Method Function
@@ -627,13 +916,13 @@ lag = 15
 future_days = window(daily_test, start=c(1992,1), end=c(1992,lag))
 
 
-pred1 = predict(arima_model, n.ahead = lag)
+pred1 = predict(model, n.ahead = lag)
 predict_values = pred1$pred + loess$time.series[, "trend"][1:lag] + loess$time.series[,"seasonal"][1:lag]
 plot(predict_values, col="black", ylim = c(-1.5,-0.5), main="prediction")
 lines(future_days, col="red")
 
 #box-jenkins method prediction
-pred2 = box_jenkins(arima_model, ahead = lag)
+pred2 = box_jenkins(model, ahead = lag)
 predict_values2 = pred2 + loess$time.series[, "trend"][1:lag] + loess$time.series[,"seasonal"][1:lag]
 plot(predict_values2, col="black", ylim = c(-1.5,-0.5), main="prediction")
 lines(future_days, col="red")
@@ -650,6 +939,24 @@ lines(pred2, col="red")
 
 
 
+<!-- # package: parallel -->
+<!-- ```{r, echo=TRUE} -->
+<!-- library(parallel) -->
+<!-- library(pbapply) -->
+
+<!-- l <- list(a = c(1,2), b = c(1,2,3))                                 # example list -->
+<!-- f <- function(x){return(length(x))}                           # example function -->
+
+<!-- n_cores <- detectCores()                                          # determine number of cores -->
+<!-- cl <- makeCluster(n_cores - 1)                                 # use all (except for 1) cores and start cluster -->
+
+<!-- pblapply(l, f, cl = cl)                                                    # use pblapply instead of lapply -->
+
+<!-- stopCluster(cl)                                                            # stop cluster -->
+
+
+
+<!-- ``` -->
 
 
 

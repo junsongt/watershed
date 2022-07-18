@@ -68,7 +68,6 @@ library(L1pack)
 <!-- ``` -->
 
 
-
 #=======================================================================================
 # Daily unimputed data
 ```{r, echo=TRUE}
@@ -152,9 +151,9 @@ hist(model$residuals)
 
 
 
-
-#=======================================================================================
-Seasonality
+# My method
+#=========================================================================================
+# Seasonality
 
 1st version ($c = E[(A^TA)^{-1}A^TY] = (A^TA)^{-1}A^T E(Y)$)
 
@@ -323,14 +322,14 @@ legend("bottomright",legend=c("outlier","no outlier"), lty=1,
 
 
 
-# Cross validation(5 fold)
+# Cross validation(5 fold by default)
 # 38 => 8 + 8 + 8 + 8 + 6
 ```{r, echo=TRUE}
-bestSeason = function(ts, window.max = 10, trim_per.max = 0.25) {
+cv.myseason = function(ts, window.max = 10, trim_per.max = 0.25, fold = 5) {
   start_year = tsp(ts)[1]
   end_year = tsp(ts)[2]
   k = floor(tsp(ts)[2]-tsp(ts)[1])+1 #k = 38 years
-  t = ceiling(k/5) #t = 8 years/unit
+  t = ceiling(k/fold) #t = 8 years/unit
   freq = as.integer(tsp(ts)[3])
   minSMSR = Inf
   best_window = 0
@@ -341,8 +340,8 @@ bestSeason = function(ts, window.max = 10, trim_per.max = 0.25) {
       for (p in (0:(trim_per.max/0.05))) {
         # sum of mean squared error over CVs
         SMSR = 0
-        # run 5 times CV
-        for (i in (1:5)) {
+        # run fold times CV
+        for (i in (1:fold)) {
           test_index = seq(from=1+(i-1)*t*freq, to=min(i*t*freq, k*freq), by=1)
           test = ts[test_index]
           test = ts(test, start=c(start_year+(i-1)*t, 1), frequency = freq)
@@ -389,32 +388,16 @@ bestSeason = function(ts, window.max = 10, trim_per.max = 0.25) {
 ```
 
 
-```{r, echo=TRUE}
-# long runtime!!!
-start_time = Sys.time()
-bestSeason(ts1409, window.max = 11, trim_per.max = 0.25)
-end_time = Sys.time()
-end_time - start_time
-```
-
-
-```{r, echo=TRUE}
-start_time = Sys.time()
-bestSeason(ts1409, window.max = 10, trim_per.max = 0)
-end_time = Sys.time()
-end_time - start_time
-
-```
 
 
 # test
 ```{r, echo=TRUE}
 start_time = Sys.time()
-best_seasonal = seasonality(ts1409, window=11, degree=0, trim=0.05)
+s_opt = seasonality(ts1409, window=11, degree=0, trim=0.05)
 end_time = Sys.time()
 end_time - start_time
 plot(ts1409, col = "green", xlim=c(1980,2000), ylim=c(-5,5), type="l", main="best seasonality(11, 0, 5%) & raw ts")
-lines(best_seasonal, col = "blue")
+lines(s_opt, col = "blue")
 lines(loess$time.series[,"seasonal"], col = "red")
 legend("bottomright",legend=c("ts","mine", "stl"), lty=1,
        col=c("green","blue","red"))
@@ -432,8 +415,8 @@ legend("bottomright",legend=c("ts","mine", "stl"), lty=1,
 
 
 
-#===========================================================================================
-Trend
+#==========================================================================================
+# Trend
 
 (1) moving average over period(center at t=183)
 ```{r, echo=TRUE}
@@ -496,7 +479,7 @@ legend("bottomright",legend=c("ts","mine", "stl"), lty=1,
 
 
 ```{r, echo=TRUE}
-res = ts1409 - best_seasonal - t1
+res = ts1409 - s_opt - t1
 
 qqnorm(res)
 qqline(res)
@@ -516,33 +499,6 @@ hist(error, main="residual by stl")
 
 ```
 
-# remove seasonality ---> remove trend
-```{r, echo=TRUE}
-ts_ds = ts1409 - s1
-r1 = ts_ds - trend(ts_ds)
-plot(r1, ylim = c(-5,5))
-qqnorm(r1)
-qqline(r1)
-
-
-```
-
-# remove trend ---> remove seasonality
-```{r, echo=TRUE}
-ts_dt = ts1409 - trend(ts1409)
-r2 = ts_dt - seasonality(ts_dt, window=11, degree = 0, trim=0.05)
-plot(r2, ylim = c(-5,5))
-qqnorm(r2)
-qqline(r2)
-
-
-```
-
-```{r, echo=TRUE}
-hist(r1)
-hist(r2)
-
-```
 
 
 
@@ -557,8 +513,9 @@ hist(r2)
 
 
 
-#===========================================================================================
-#loess method
+# LOESS
+#==========================================================================================
+# loess method
 
 #preparation
 ```{r, echo=TRUE}
@@ -608,14 +565,15 @@ end_time - start_time
 
 ```
 
-```{r, echo=TRUE}
-start_time = Sys.time()
-s = loess(y ~ x, data=df, degree=2, family="symmetric", method="loess", control =loess.control(iterations = 5))
-end_time = Sys.time()
-end_time - start_time
+
+<!-- ```{r, echo=TRUE} -->
+<!-- start_time = Sys.time() -->
+<!-- s = loess(y ~ x, data=df, degree=2, family="symmetric", method="loess", control =loess.control(iterations = 5)) -->
+<!-- end_time = Sys.time() -->
+<!-- end_time - start_time -->
 
 
-```
+<!-- ``` -->
 
 #seasonality
 ```{r, echo=TRUE}
@@ -647,7 +605,7 @@ seasonal.loess = function(ts, deg=2, span=0.75, iter=4) {
   k = floor(tsp(ts)[2]-tsp(ts)[1])+1
   freq = as.integer(tsp(ts)[3])
   start_year = as.integer(tsp(ts)[1])
-  # form data frame
+  # form data frame arranged in same day order
   x = NULL
   y = NULL
   z = NULL
@@ -678,14 +636,14 @@ seasonal.loess = function(ts, deg=2, span=0.75, iter=4) {
 
 
 
-
+#test
 ```{r, echo=TRUE}
 start_time = Sys.time()
 s3 = seasonal.loess(ts1409, span=1/30)
 end_time = Sys.time()
 end_time - start_time
 plot(df$y ~ df$x, col = "green", main = "one full period")
-lines(best_seasonal[1:365], col = "red")
+lines(s_opt[1:365], col = "red")
 lines(s3[1:365], col = "blue")
 legend("topright",legend=c("ts","loess", "mine"), lty=1,
        col=c("green","blue","red"))
@@ -694,16 +652,376 @@ legend("topright",legend=c("ts","loess", "mine"), lty=1,
 ```{r, echo=TRUE}
 plot(ts1409, type="l", xlim = c(1980,1982), ylim=c(-3,3), col="green")
 lines(s3, col="blue")
-lines(best_seasonal, col="red")
+lines(s_opt, col="red")
 ```
 
-#CV
+
+
+
+
+
+
+
+#trend
+
 ```{r, echo=TRUE}
-best_season = function(ts, d.max, s.max) {
+trend.loess = function(ts, deg=2, span=0.75, iter=4) {
+  freq = as.integer(tsp(ts)[3])
+  start_year = as.integer(tsp(ts)[1])
+  n = length(ts)
+  window_ref = n * span
+  trend = NULL
+  # 1st cursor, controlling pos in whole ts
+  start_pos = 1
+  while (start_pos <= n) {
+    x = NULL
+    y = NULL
+    # 2nd cursor, controlling accumulating consecutive non-NA
+    i = start_pos
+    while (!is.na(ts[i])) {
+      y = c(y, ts[i])
+      x = c(x, i)
+      i = i + 1
+    }
+
+    # first time meets NA after consecutive strings of non-NA
+    if (!is.null(y)) {
+      new_span = window_ref / length(y)
+      loess_obj = loess(y ~ x, span=new_span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
+      trend = c(trend, loess_obj$fitted)
+      start_pos = i
+    }
+    
+    # if (!is.null(y) && length(y) >= window) {
+    #   loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
+    #   trend = c(trend, loess_obj$fitted)
+    #   if (i <= n) {
+    #     trend = c(trend, NA)
+    #   }
+    # }
+    # # some non-NA but length too short
+    # else if (length(y) < window) {
+    #   trend = c(trend, rep(NA, length(y)))
+    #   if (i <= n) {
+    #     trend = c(trend, NA)
+    #   }
+    # }
+    
+    # consecutive NAs
+    else {
+      trend = c(trend, NA)
+      start_pos = i + 1
+    }
+  }
+
+  return (ts(trend, start=c(start_year, 1), frequency = freq))
+}
+
+
+
+```
+
+
+<!-- ```{r, echo=TRUE} -->
+<!-- trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) { -->
+<!--   freq = as.integer(tsp(ts)[3]) -->
+<!--   start_year = as.integer(tsp(ts)[1]) -->
+<!--   n = length(ts) -->
+<!--   trend = NULL -->
+<!--   # 1st cursor, controlling pos in whole ts -->
+<!--   start_pos = 1 -->
+<!--   prev_obj = NULL -->
+<!--   while (start_pos <= n) { -->
+<!--     x = NULL -->
+<!--     y = NULL -->
+<!--     # 2nd cursor, controlling accumulating consecutive non-NA -->
+<!--     i = start_pos -->
+<!--     while (!is.na(ts[i])) { -->
+<!--       y = c(y, ts[i]) -->
+<!--       x = c(x, i) -->
+<!--       i = i + 1 -->
+<!--     } -->
+
+<!--     window = n * span -->
+<!--     # first time meets NA after consecutive strings of non-NA -->
+<!--     if (!is.null(y) && length(y) >= window) { -->
+<!--       loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter)) -->
+<!--       prev_obj = loess_obj -->
+<!--       trend = c(trend, loess_obj$fitted) -->
+<!--       if (i <= n) { -->
+<!--         if (!impute) { -->
+<!--           trend = c(trend, NA) -->
+<!--         } -->
+<!--         else { -->
+<!--           pred = predict(object=prev_obj, newdata=data.frame(x=i)) -->
+<!--           trend = c(trend, pred) -->
+<!--         } -->
+
+<!--       } -->
+<!--     } -->
+<!--     # some non-NA but length too short -->
+<!--     else if (length(y) < window) { -->
+<!--       trend = c(trend, rep(NA, length(y))) -->
+<!--       if (i <= n) { -->
+<!--         trend = c(trend, NA) -->
+<!--       } -->
+<!--     } -->
+<!--     # consecutive NAs -->
+<!--     else { -->
+<!--       trend = c(trend, NA) -->
+<!--     } -->
+<!--     start_pos = i + 1 -->
+<!--   } -->
+
+<!--   return (ts(trend, start=c(start_year, 1), frequency = freq)) -->
+<!-- } -->
+
+
+<!-- trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) { -->
+<!--   freq = as.integer(tsp(ts)[3]) -->
+<!--   start_year = as.integer(tsp(ts)[1]) -->
+<!--   n = length(ts) -->
+<!--   trend = NULL -->
+<!--   # 1st cursor, controlling pos in whole ts -->
+<!--   start_pos = 1 -->
+<!--   while (start_pos <= n) { -->
+<!--     x = NULL -->
+<!--     y = NULL -->
+<!--     # 2nd cursor, controlling accumulating consecutive non-NA -->
+<!--     i = start_pos -->
+<!--     while (!is.na(ts[i])) { -->
+<!--       y = c(y, ts[i]) -->
+<!--       x = c(x, i) -->
+<!--       i = i + 1 -->
+<!--     } -->
+
+<!--     window = n * span -->
+<!--     # first time meets NA after consecutive strings of non-NA -->
+<!--     if (!is.null(y) && length(y) >= window) { -->
+<!--       loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter)) -->
+<!--       trend = c(trend, loess_obj$fitted) -->
+<!--       if (i <= n) { -->
+<!--         trend = c(trend, NA) -->
+<!--       } -->
+<!--     } -->
+<!--     # some non-NA but length too short -->
+<!--     else if (length(y) < window) { -->
+<!--       trend = c(trend, rep(NA, length(y))) -->
+<!--       if (i <= n) { -->
+<!--         trend = c(trend, NA) -->
+<!--       } -->
+<!--     } -->
+<!--     # consecutive NAs -->
+<!--     else { -->
+<!--       trend = c(trend, NA) -->
+<!--     } -->
+<!--     start_pos = i + 1 -->
+<!--   } -->
+
+<!--   return (ts(trend, start=c(start_year, 1), frequency = freq)) -->
+<!-- } -->
+
+
+<!-- ``` -->
+
+
+
+#test
+```{r, echo=TRUE, warning=FALSE}
+# ts1409_ds = ts1409 - ts(seasonal(ts1409, span=0.5, deg=2), start = c(1980,1), frequency = 365)
+start_time = Sys.time()
+t2 = trend.loess(ts1409, span=1.5/38)
+end_time = Sys.time()
+end_time - start_time
+
+
+
+plot(ts1409, type="l", col="green", ylim=c(-5,5))
+lines(t2, col="red")
+lines(stl_obj$time.series[,"trend"], col = "blue")
+
+t3 = trend.loess(ts1409 -  s3, span = 2/38)
+plot(ts1409, type="l", col="green", ylim=c(-5,5))
+lines(t3, col="red")
+lines(stl_obj$time.series[,"trend"], col = "blue")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Convergence test
+#==========================================================================================
+alternate season & trend extraction difference convergence test
+
+$$X - s_1 = t_1 + \epsilon$$
+$$X - t_1 = s_2 + \epsilon$$
+$$X - s_2 = t_2 + \epsilon$$
+$$\ldots$$
+$$X - s_{n-1} = t_{n-1} + \epsilon$$
+$$X - t_{n-1} = s_n + \epsilon$$
+$$X - S_n = t_n + \epsilon$$
+
+
+```{r, echo=TRUE}
+#iter should be odd
+convergence.test = function(ts, iter) {
+  ds = NULL
+  dt = NULL
+  prev_season = rep(0, length(ts))
+  prev_trend = rep(0, length(ts))
+  for (i in (1:iter)) {
+    if (i == 1) {
+      curr_season = seasonal.loess(ts, span=1/30)
+      curr_trend = trend.loess(ts - curr_season, span=1/38)
+      ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
+      dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
+      prev_season = curr_season
+      prev_trend = curr_trend
+    }
+    else if (i %% 2 != 0) {
+      curr_trend = trend.loess(ts - prev_season, span=1/38)
+      dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
+      prev_trend = curr_trend
+    }
+    else {
+      curr_season = seasonal.loess(ts - prev_trend, span=1/30)
+      ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
+      prev_season = curr_season
+    }
+  }
+  
+  return(data.frame(ds, dt))
+}
+
+
+```
+
+
+
+```{r, echo=TRUE, warning=FALSE}
+start_time = Sys.time()
+convergence_list = convergence.test(ts1409, iter = 31)
+end_time = Sys.time()
+end_time - start_time
+par(mfrow=c(2,1))
+plot(convergence_list$dt, col="blue", main="trend")
+plot(convergence_list$ds, col="red", main="seasonal")
+
+```
+
+
+
+#relative error = sum(r_old^2) - sum(r_new^2)/ sum(r_new^2)
+
+#do while(sum(r_old^2) - sum(r_new^2) < 1 - relative error)
+
+```{r, echo=TRUE}
+residual.test = function(ts, iter) {
+  relative_errors = NULL
+
+  prev_season = rep(0, length(ts))
+  prev_trend = rep(0, length(ts))
+  prev_error = rep(0, length(ts))
+  for (i in (1:iter)) {
+    if (i == 1) {
+      curr_season = seasonal.loess(ts, span=1/30)
+      curr_trend = trend.loess(ts - curr_season, span=1/38)
+      curr_error = ts - curr_season - curr_trend
+      
+      curr = sum(curr_error^2, na.rm = TRUE)
+      prev = sum(prev_error^2, na.rm = TRUE)
+      
+      relative_errors = c(relative_errors, abs(curr - prev)/curr)
+      
+      prev_season = curr_season
+      prev_trend = curr_trend
+      prev_error = curr_error
+      
+    }
+    else if (i %% 2 != 0) {
+      curr_trend = trend.loess(ts - prev_season, span=1/38)
+      curr_error = ts - curr_trend - prev_season
+      curr = sum(curr_error^2, na.rm = TRUE)
+      prev = sum(prev_error^2, na.rm = TRUE)
+      
+      relative_errors = c(relative_errors, abs(curr - prev)/curr)
+
+      prev_trend = curr_trend
+      prev_error = curr_error
+    }
+    else {
+      curr_season = seasonal.loess(ts - prev_trend, span=1/30)
+      curr_error = ts - curr_season - prev_trend
+      curr = sum(curr_error^2, na.rm = TRUE)
+      prev = sum(prev_error^2, na.rm = TRUE)
+      
+      relative_errors = c(relative_errors, abs(curr - prev)/curr)
+
+      prev_season = curr_season
+      prev_error = curr_error
+    }
+  }
+  
+  return(relative_errors)
+}
+
+
+
+```
+
+
+
+```{r, echo=TRUE, warning=FALSE}
+start_time = Sys.time()
+residual.test(ts1409, iter = 21)
+end_time = Sys.time()
+end_time - start_time
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Cross Validation
+#==========================================================================================
+
+#cv.seasonal
+```{r, echo=TRUE}
+cv.seasonal = function(ts, d.max, s.max, fold = 5) {
   start_year = tsp(ts)[1]
   end_year = tsp(ts)[2]
   k = floor(tsp(ts)[2]-tsp(ts)[1])+1 #k = 38 years
-  t = ceiling(k/5) #t = 8 years/unit
+  t = ceiling(k/fold) #t = t years/unit
   freq = as.integer(tsp(ts)[3])
   minSMSR = Inf
 
@@ -715,7 +1033,7 @@ best_season = function(ts, d.max, s.max) {
       # sum of mean squared error over CVs
       SMSR = 0
       # run 5 times CV
-      for (i in (1:5)) {
+      for (i in (1:fold)) {
         test_index = seq(from=1+(i-1)*t*freq, to=min(i*t*freq, k*freq), by=1)
         test = ts[test_index]
         test = ts(test, start=c(start_year+(i-1)*t, 1), frequency = freq)
@@ -748,7 +1066,7 @@ best_season = function(ts, d.max, s.max) {
 
 ```{r, echo=TRUE}
 start_time = Sys.time()
-best_season(ts1409, d.max=2, s.max=0.5)
+cv.seasonal(ts1409, d.max=2, s.max=0.5, fold = 2)
 end_time = Sys.time()
 end_time - start_time
 
@@ -756,157 +1074,67 @@ end_time - start_time
 
 
 
-
-
-
-#trend
+#cv.trend
 ```{r, echo=TRUE}
-trend.loess = function(ts, deg=2, span=0.75, iter=4) {
+cv.trend = function(ts, d.max, s.max, fold = 5) {
+  start_year = tsp(ts)[1]
+  end_year = tsp(ts)[2]
+  k = floor(tsp(ts)[2]-tsp(ts)[1])+1 #k = 38 years
+  t = ceiling(k/fold) #t = t years/unit
   freq = as.integer(tsp(ts)[3])
-  start_year = as.integer(tsp(ts)[1])
-  trend = NULL
-  # 1st cursor, controling pos in whole ts
-  start_pos = 1
-  while (start_pos <= length(ts)) {
-    x = NULL
-    y = NULL
-    # 2nd cursor, controling accumulating consecutive non-NA
-    i = start_pos
-    while (!is.na(ts[i])) {
-      y = c(y, ts[i])
-      x = c(x, i)
-      i = i + 1
-    }
-
-    # first time meets NA after consecutive strings of non-NA
-    if (!is.null(y) && length(y) >= 100) {
-      loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control =loess.control(iterations=iter))
-      trend = c(trend, loess_obj$fitted)
-      if (i <= length(ts)) {
-        trend = c(trend, NA)
-      }
-    }
-    # some non-NA but length too short
-    else if (length(y) < 100) {
-      trend = c(trend, rep(NA, length(y)))
-      if (i <= length(ts)) {
-        trend = c(trend, NA)
-      }
-    }
-    # consecutive NAs
-    else {
-      trend = c(trend, NA)
-    }
+  n = length(ts)
   
-    start_pos = i + 1
-  }
+  
+  minSMSR = Inf
 
-  return (ts(trend, start=c(start_year, 1), frequency = freq))
-}
+  best_degree = 0
+  best_span = 1*0.05
+  
+  for (d in (0:d.max)) {
+    for (s in (1:(round(s.max/0.01)))) {
+      # sum of mean squared error over CVs
+      SMSR = 0
+      # run 5 times CV
+      remain_index = c(1:n)
+      for (i in (1:fold)) {
+        test_index = sample(remain_index, size=min(ceiling(n/fold), length(remain_index)), replace=FALSE)
+        train_index = c(1:n)[-test_index]
 
-
-
-```
-
-
-```{r, echo=TRUE}
-# ts1409_ds = ts1409 - ts(seasonal(ts1409, span=0.5, deg=2), start = c(1980,1), frequency = 365)
-start_time = Sys.time()
-t2 = trend.loess(ts1409, span=1/6)
-end_time = Sys.time()
-end_time - start_time
-
-
-
-plot(ts1409, type="l", xlim = c(2013,2018),col="green", ylim=c(-5,5))
-lines(t1, col="red")
-lines(t2, col="blue")
-
-```
-
-
-
-alternate season & trend extraction difference convergence test
-
-$$X - s_1 = t_1 + \epsilon$$
-$$X - t_1 = s_2 + \epsilon$$
-$$X - s_2 = t_2 + \epsilon$$
-$$\ldots$$
-$$X - s_{n-1} = t_{n-1} + \epsilon$$
-$$X - t_{n-1} = s_n + \epsilon$$
-$$X - S_n = t_n + \epsilon$$
-
-
-```{r, echo=TRUE}
-#iter should be odd
-convergence.test = function(ts, iter) {
-  ds = NULL
-  dt = NULL
-  prev_season = rep(0, length(ts))
-  prev_trend = rep(0, length(ts))
-  for (i in (1:iter)) {
-    if (i == 1) {
-      curr_season = seasonal.loess(ts, span=1/30)
-      curr_trend = trend.loess(ts - curr_season, span=1/30)
-      ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
-      dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
-      prev_season = curr_season
-      prev_trend = curr_trend
-    }
-    else if (i %% 2 != 0) {
-      curr_trend = trend.loess(ts - prev_season, span=1/30)
-      dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
-      prev_trend = curr_trend
-    }
-    else {
-      curr_season = seasonal.loess(ts - prev_trend, span=1/30)
-      ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
-      prev_season = curr_season
+        test = ts[test_index]
+        
+        train = ts
+        train[test_index] = NA
+        
+        trend = trend.loess(train, deg=d, span=s*0.01)
+        pred = as.numeric(predict(trend, newdata=data.frame(x=test_index)))
+        residual = (test - pred)
+        SMSR = SMSR + mean(residual^2, na.rm = TRUE)
+        remain_index = remain_index[-test_index]
+      }
+      
+      if (SMSR < minSMSR) {
+        best_degree = d
+        best_span = s*0.01
+        minSMSR = SMSR
+      }
     }
   }
   
-  return(data.frame(ds, dt))
+  return (data.frame(best_degree, best_span))
 }
 
 
 ```
 
 
-
 ```{r, echo=TRUE}
+set.seed(2022)
 start_time = Sys.time()
-convergence_list = convergence.test(ts1409, iter = 31)
+cv.trend(ts1409, d.max=2, s.max=4/38, fold=3)
 end_time = Sys.time()
-end_time - start_time
-par(mfrow=c(2,1))
-plot(convergence_list$dt, col="blue", main="trend")
-plot(convergence_list$ds, col="red", main="seasonal")
+end_time = start_time
 
 ```
-
-relative error = sum(r_old^2) - sum(r_new^2)/ sum(r_new^2)
-
-do while(sum(r_old^2) - sum(r_new^2) < 1 - relative error)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

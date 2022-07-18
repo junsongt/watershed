@@ -692,21 +692,6 @@ trend.loess = function(ts, deg=2, span=0.75, iter=4) {
       start_pos = i
     }
     
-    # if (!is.null(y) && length(y) >= window) {
-    #   loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
-    #   trend = c(trend, loess_obj$fitted)
-    #   if (i <= n) {
-    #     trend = c(trend, NA)
-    #   }
-    # }
-    # # some non-NA but length too short
-    # else if (length(y) < window) {
-    #   trend = c(trend, rep(NA, length(y)))
-    #   if (i <= n) {
-    #     trend = c(trend, NA)
-    #   }
-    # }
-    
     # consecutive NAs
     else {
       trend = c(trend, NA)
@@ -722,109 +707,114 @@ trend.loess = function(ts, deg=2, span=0.75, iter=4) {
 ```
 
 
-<!-- ```{r, echo=TRUE} -->
-<!-- trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) { -->
-<!--   freq = as.integer(tsp(ts)[3]) -->
-<!--   start_year = as.integer(tsp(ts)[1]) -->
-<!--   n = length(ts) -->
-<!--   trend = NULL -->
-<!--   # 1st cursor, controlling pos in whole ts -->
-<!--   start_pos = 1 -->
-<!--   prev_obj = NULL -->
-<!--   while (start_pos <= n) { -->
-<!--     x = NULL -->
-<!--     y = NULL -->
-<!--     # 2nd cursor, controlling accumulating consecutive non-NA -->
-<!--     i = start_pos -->
-<!--     while (!is.na(ts[i])) { -->
-<!--       y = c(y, ts[i]) -->
-<!--       x = c(x, i) -->
-<!--       i = i + 1 -->
-<!--     } -->
-
-<!--     window = n * span -->
-<!--     # first time meets NA after consecutive strings of non-NA -->
-<!--     if (!is.null(y) && length(y) >= window) { -->
-<!--       loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter)) -->
-<!--       prev_obj = loess_obj -->
-<!--       trend = c(trend, loess_obj$fitted) -->
-<!--       if (i <= n) { -->
-<!--         if (!impute) { -->
-<!--           trend = c(trend, NA) -->
-<!--         } -->
-<!--         else { -->
-<!--           pred = predict(object=prev_obj, newdata=data.frame(x=i)) -->
-<!--           trend = c(trend, pred) -->
-<!--         } -->
-
-<!--       } -->
-<!--     } -->
-<!--     # some non-NA but length too short -->
-<!--     else if (length(y) < window) { -->
-<!--       trend = c(trend, rep(NA, length(y))) -->
-<!--       if (i <= n) { -->
-<!--         trend = c(trend, NA) -->
-<!--       } -->
-<!--     } -->
-<!--     # consecutive NAs -->
-<!--     else { -->
-<!--       trend = c(trend, NA) -->
-<!--     } -->
-<!--     start_pos = i + 1 -->
-<!--   } -->
-
-<!--   return (ts(trend, start=c(start_year, 1), frequency = freq)) -->
-<!-- } -->
+```{r, echo=TRUE}
+# trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) {
+#   freq = as.integer(tsp(ts)[3])
+#   start_year = as.integer(tsp(ts)[1])
+#   n = length(ts)
+#   window_ref = n * span
+#   trend = NULL
+#   # 1st cursor, controlling pos in whole ts
+#   start_pos = 1
+#   prev_obj = NULL
+#   while (start_pos <= n) {
+#     x = NULL
+#     y = NULL
+#     # 2nd cursor, controlling accumulating consecutive non-NA
+#     i = start_pos
+#     while (!is.na(ts[i])) {
+#       y = c(y, ts[i])
+#       x = c(x, i)
+#       i = i + 1
+#     }
+# 
+#     # first time meets NA after consecutive strings of non-NA
+#     if (!is.null(y)) {
+#       new_span = window_ref / length(y)
+#       loess_obj = loess(y ~ x, span=new_span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
+#       prev_obj = loess_obj
+#       trend = c(trend, loess_obj$fitted)
+#       start_pos = i
+#     }
+#     
+#     # consecutive NAs
+#     else {
+#       if (!impute) {
+#         trend = c(trend, NA)
+#       }
+#       else {
+#         pred = as.numeric(predict(object=prev_obj, newdata=data.frame(x=i)))
+#         trend = c(trend, pred)
+#       }
+#       start_pos = i + 1
+#     }
+#   }
+# 
+#   return (ts(trend, start=c(start_year, 1), frequency = freq))
+# }
 
 
-<!-- trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) { -->
-<!--   freq = as.integer(tsp(ts)[3]) -->
-<!--   start_year = as.integer(tsp(ts)[1]) -->
-<!--   n = length(ts) -->
-<!--   trend = NULL -->
-<!--   # 1st cursor, controlling pos in whole ts -->
-<!--   start_pos = 1 -->
-<!--   while (start_pos <= n) { -->
-<!--     x = NULL -->
-<!--     y = NULL -->
-<!--     # 2nd cursor, controlling accumulating consecutive non-NA -->
-<!--     i = start_pos -->
-<!--     while (!is.na(ts[i])) { -->
-<!--       y = c(y, ts[i]) -->
-<!--       x = c(x, i) -->
-<!--       i = i + 1 -->
-<!--     } -->
+trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) {
+  freq = as.integer(tsp(ts)[3])
+  start_year = as.integer(tsp(ts)[1])
+  n = length(ts)
+  window_ref = n * span
+  trend = NULL
+  # 1st cursor, controlling pos in whole ts
+  start_pos = 1
+  prev_obj = NULL
+  while (start_pos <= n) {
+    x = NULL
+    y = NULL
+    # 2nd cursor, controlling accumulating consecutive non-NA
+    i = start_pos
 
-<!--     window = n * span -->
-<!--     # first time meets NA after consecutive strings of non-NA -->
-<!--     if (!is.null(y) && length(y) >= window) { -->
-<!--       loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter)) -->
-<!--       trend = c(trend, loess_obj$fitted) -->
-<!--       if (i <= n) { -->
-<!--         trend = c(trend, NA) -->
-<!--       } -->
-<!--     } -->
-<!--     # some non-NA but length too short -->
-<!--     else if (length(y) < window) { -->
-<!--       trend = c(trend, rep(NA, length(y))) -->
-<!--       if (i <= n) { -->
-<!--         trend = c(trend, NA) -->
-<!--       } -->
-<!--     } -->
-<!--     # consecutive NAs -->
-<!--     else { -->
-<!--       trend = c(trend, NA) -->
-<!--     } -->
-<!--     start_pos = i + 1 -->
-<!--   } -->
+    while (!is.na(ts[i])) {
+      y = c(y, ts[i])
+      x = c(x, i)
+      i = i + 1
+    }
 
-<!--   return (ts(trend, start=c(start_year, 1), frequency = freq)) -->
-<!-- } -->
+    # first time meets NA after consecutive strings of non-NA
+    if (!is.null(y)) {
+      new_span = window_ref / length(y)
+      loess_obj = loess(y ~ x, span=new_span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
+      prev_obj = loess_obj
+      trend = c(trend, loess_obj$fitted)
+      start_pos = i
+    }
+
+    # consecutive NAs
+    else {
+      na_index = NULL
+      while (is.na(ts[i])) {
+        na_index = c(na_index, i)
+        i = i + 1
+      }
+      if (!impute) {
+        trend = c(trend, rep(NA, length(na_index)))
+      }
+      else {
+        pred = as.numeric(predict(object=prev_obj, newdata=data.frame(x=na_index)))
+        trend = c(trend, pred)
+      }
+      start_pos = i
+    }
+  }
+
+  return (ts(trend, start=c(start_year, 1), frequency = freq))
+}
 
 
-<!-- ``` -->
+```
 
+```{r, echo=TRUE, warning=FALSE}
+start_time = Sys.time()
+t = trend.loess(ts1409, span=1/38, impute = TRUE)
+end_time = Sys.time()
+end_time - start_time
 
+```
 
 #test
 ```{r, echo=TRUE, warning=FALSE}
@@ -837,7 +827,7 @@ end_time - start_time
 
 
 plot(ts1409, type="l", col="green", ylim=c(-5,5))
-lines(t2, col="red")
+lines(t, col="red")
 lines(stl_obj$time.series[,"trend"], col = "blue")
 
 t3 = trend.loess(ts1409 -  s3, span = 2/38)
@@ -1104,9 +1094,10 @@ cv.trend = function(ts, d.max, s.max, fold = 5) {
         
         train = ts
         train[test_index] = NA
+        train = ts(train, start=c(start_year,1), frequency=freq)
         
-        trend = trend.loess(train, deg=d, span=s*0.01)
-        pred = as.numeric(predict(trend, newdata=data.frame(x=test_index)))
+        trend = trend.loess(train, deg=d, span=s*0.01, impute=TRUE)
+        pred = trend[test_index]
         residual = (test - pred)
         SMSR = SMSR + mean(residual^2, na.rm = TRUE)
         remain_index = remain_index[-test_index]
@@ -1127,10 +1118,10 @@ cv.trend = function(ts, d.max, s.max, fold = 5) {
 ```
 
 
-```{r, echo=TRUE}
+```{r, echo=TRUE, warning=FALSE}
 set.seed(2022)
 start_time = Sys.time()
-cv.trend(ts1409, d.max=2, s.max=4/38, fold=3)
+cv.trend(ts1409, d.max=2, s.max=2/38, fold=3)
 end_time = Sys.time()
 end_time = start_time
 

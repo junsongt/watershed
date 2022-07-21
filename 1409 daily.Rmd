@@ -72,7 +72,7 @@ library(L1pack)
 # Daily unimputed data
 ```{r, echo=TRUE}
 # data1409 = mget(load("D:/NSERC/project/processedData/1409_dat.RData"))
-daily = daily_frame(data1409)
+daily1409 = daily_frame(data1409)
 # daily = dailyFrame(data1409$resp_mat)
 # daily2 = data.frame(resp = as.vector(t(resp_mat)),
 #                     rain = as.vector(t(rain_mat)),
@@ -82,10 +82,10 @@ daily = daily_frame(data1409)
 #                     day = 1:ncol(resp_mat))
 
 # identifying the range of NA
-daily[is.na(daily$resp),]
+daily1409[is.na(daily1409$resp),]
 
 # subset of log-daily from 1980.1 - 1994.12(15 years)
-ts1409 = ts(log(daily$resp), start=c(1980,1), frequency = 365)
+ts1409 = ts(log(daily1409$resp), start=c(1980,1), frequency = 365)
 plot(ts1409)
 acf(ts1409, lag.max = 365*5, main = "acf of daily response", na.action = na.pass)
 pacf(ts1409, lag.max = 365*5, main = "pacf of daily respoonse", na.action = na.pass)
@@ -398,7 +398,7 @@ end_time = Sys.time()
 end_time - start_time
 plot(ts1409, col = "green", xlim=c(1980,2000), ylim=c(-5,5), type="l", main="best seasonality(11, 0, 5%) & raw ts")
 lines(s_opt, col = "blue")
-lines(loess$time.series[,"seasonal"], col = "red")
+lines(stl_obj$time.series[,"seasonal"], col = "red")
 legend("bottomright",legend=c("ts","mine", "stl"), lty=1,
        col=c("green","blue","red"))
 
@@ -671,7 +671,7 @@ trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) {
   n = length(ts)
   y = ts
   x = c(1:n)
-  loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
+  loess_obj = loess(y ~ x, na.action=na.exclude, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
   na_index = which(is.na(ts))
   y[-na_index] = loess_obj$fitted
   if (impute) {
@@ -687,7 +687,6 @@ trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) {
 
 
 ```
-
 
 
 
@@ -845,6 +844,8 @@ t2 = trend.loess(ts1409, span=1.5/38)
 end_time = Sys.time()
 end_time - start_time
 
+plot(ts1409, type="l", col="green", ylim=c(-5,5))
+lines(t2, col="red")
 
 
 plot(ts1409, type="l", col="green", ylim=c(-5,5), main="seasonality compare")
@@ -1044,9 +1045,11 @@ plot(residual_list, ylim=c(0,0.005))
 $$\text{total mean squrared error} = \frac1n \sum_{i=1}^{n} \varepsilon_{i}^2$$
 $$\text{In k-fold CV, }\sum_{j=1}^k n_j = n$$
 
+$$\text{span.max} = \frac{k}{\sqrt{n}}$$
+
 #cv.seasonal
 ```{r, echo=TRUE}
-cv.seasonal = function(ts, d.max, span.min=0.01, span.max, span.control=0.01, fold=5) {
+cv.seasonal = function(ts, d.max=2, span.min=0.01, span.max, span.control=0.01, fold=5) {
   start_year = tsp(ts)[1]
   end_year = tsp(ts)[2]
   k = floor(end_year-start_year)+1 #k = 38 years
@@ -1107,7 +1110,7 @@ end_time - start_time
 #cv.trend
 
 ```{r, echo=TRUE}
-cv.trend = function(ts, d.max, span.min=0.01, span.max, span.control=0.01, fold=5) {
+cv.trend = function(ts, d.max = 2, span.min=0.01, span.max, span.control=0.01, fold=5) {
   start_year = tsp(ts)[1]
   end_year = tsp(ts)[2]
   k = floor(end_year-start_year)+1 #k = 38 years

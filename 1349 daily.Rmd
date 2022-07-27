@@ -1,0 +1,104 @@
+---
+title: "1349 daily"
+author: "Junsong Tang"
+date: '2022-07-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tseries)
+library(xts)
+library(zoo)
+library(tidyverse)
+library(forecast)
+library(stlplus)
+library(seasonal)
+library(L1pack)
+
+
+```
+
+
+# watershed 1349 has snow fraction 2%
+
+```{r, echo=TRUE}
+data1349 = mget(load(paste0(PATH, "1349_dat.Rdata")))
+daily1349 = as.daily(data1349)
+# identifying the range of NA
+daily1349[is.na(daily1349$resp),]
+
+ts1349 = ts(log(daily1349$resp), start=c(1980,1), frequency = 365)
+plot(ts1349)
+acf(ts1349, lag.max = 365*5, main = "acf of daily response", na.action = na.pass)
+pacf(ts1349, lag.max = 365*5, main = "pacf of daily respoonse", na.action = na.pass)
+```
+
+
+
+# stl
+```{r, echo=TRUE}
+na.new = function(x) {ts(zoo::na.approx(x), start = c(1980,1), frequency = 365)}
+stl1349 = stl(ts1349, s.window = "periodic", na.action = na.new)
+plot(stl1349)
+# check residuals
+# daily_ts has length 13870; while residual has 13398, probably due to NAs in raw ts.
+error = stl1349$time.series[,"remainder"]
+qqnorm(error)
+qqline(error)
+acf(error, lag.max= 365*5, main="acf of residual")
+pacf(error, lag.max = 365*3, main="pacf of residual")
+pacf(error, main="pacf of residual")
+
+
+```
+
+# model
+```{r, echo=TRUE}
+model = arima(error, order = c(3,0,0), include.mean = TRUE)
+acf(model$residuals)
+pacf(model$residuals, lag.max = 365)
+tsdiag(model)
+qqnorm(model$residuals)
+qqline(model$residuals)
+hist(model$residuals)
+
+```
+
+
+
+# seasonality
+```{r, echo=TRUE}
+season1349 = seasonal.loess(ts1349-trend1349, span=1/30)
+plot(ts1349, type="l", col="green", ylim=c(-10,10), main="seasonality compare")
+lines(season1349, col="red")
+lines(stl1349$time.series[,"seasonal"], col = "blue")
+legend("topright",legend=c("ts","loess", "stl"), lty=1,
+       col=c("green","red","blue"))
+```
+
+
+# trend
+```{r, echo=TRUE}
+trend1349 = trend.loess(ts1349, span=4/39)
+plot(ts1349, type="l", col="green", ylim=c(-10,10), main="trend compare")
+lines(trend1349, col="red")
+lines(stl1349$time.series[,"trend"], col = "blue")
+legend("topright",legend=c("ts","loess", "stl"), lty=1,
+       col=c("green","red","blue"))
+
+```
+
+
+# model fitting
+```{r, echo=TRUE}
+model = arima(error, order = c(5,0,0), include.mean = TRUE)
+acf(model$residuals)
+pacf(model$residuals, lag.max = 365)
+tsdiag(model)
+qqnorm(model$residuals)
+qqline(model$residuals)
+hist(model$residuals)
+
+```

@@ -1,0 +1,118 @@
+---
+title: '1458'
+author: "Junsong Tang"
+date: '2022-07-21'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tseries)
+library(xts)
+library(zoo)
+library(tidyverse)
+library(forecast)
+library(stlplus)
+library(seasonal)
+library(L1pack)
+
+
+```
+
+
+
+# watershed 1458 has the largest snow fraction of all, which is 66%
+
+```{r, echo=TRUE}
+data1458 = mget(load(paste0(PATH, "1458_dat.Rdata")))
+daily1458 = as.daily(data1458)
+# identifying the range of NA
+daily1458[is.na(daily1458$resp),]
+
+ts1458 = ts(log(daily1458$resp), start=c(1980,1), frequency = 365)
+plot(ts1458)
+acf(ts1458, lag.max = 365*5, main = "acf of daily response", na.action = na.pass)
+pacf(ts1458, lag.max = 365*5, main = "pacf of daily respoonse", na.action = na.pass)
+```
+
+
+
+# stl
+```{r, echo=TRUE}
+na.new = function(x) {ts(zoo::na.approx(x), start = c(1980,1), frequency = 365)}
+stl1458 = stl(ts1458, s.window = "periodic", na.action = na.new)
+plot(stl1458)
+# check residuals
+# daily_ts has length 13870; while residual has 13398, probably due to NAs in raw ts.
+error = stl1458$time.series[,"remainder"]
+qqnorm(error)
+qqline(error)
+acf(error, lag.max= 365*5, main="acf of residual")
+pacf(error, lag.max = 365*3, main="pacf of residual")
+pacf(error, main="pacf of residual")
+
+
+```
+
+# model
+```{r, echo=TRUE}
+model = arima(error, order = c(3,0,0), include.mean = TRUE)
+acf(model$residuals)
+pacf(model$residuals, lag.max = 365)
+tsdiag(model)
+qqnorm(model$residuals)
+qqline(model$residuals)
+hist(model$residuals)
+
+```
+
+
+
+# seasonality
+```{r, echo=TRUE}
+season1458 = seasonal.loess(ts1458, span=1/30)
+plot(ts1458, type="l", col="green", ylim=c(-10,10), main="seasonality compare")
+lines(season1458, col="red")
+lines(stl1458$time.series[,"seasonal"], col = "blue")
+legend("topright",legend=c("ts","loess", "stl"), lty=1,
+       col=c("green","red","blue"))
+```
+
+
+# trend
+```{r, echo=TRUE}
+trend1458 = trend.loess(ts1458, span=2/39)
+plot(ts1458, type="l", col="green", ylim=c(-10,10), main="trend compare")
+lines(trend1458, col="red")
+lines(stl1458$time.series[,"trend"], col = "blue")
+legend("topright",legend=c("ts","loess", "stl"), lty=1,
+       col=c("green","red","blue"))
+
+```
+
+
+
+
+
+```{r,echo=TRUE}
+convergence_list = convergence.test(ts1458, iter = 31)
+par(mfrow=c(2,1))
+plot(convergence_list$dt, col="blue", main="trend")
+plot(convergence_list$ds, col="red", main="seasonal")
+
+
+```
+
+
+# model fitting
+```{r, echo=TRUE}
+model = arima(error, order = c(5,0,0), include.mean = TRUE)
+acf(model$residuals)
+pacf(model$residuals, lag.max = 365)
+tsdiag(model)
+qqnorm(model$residuals)
+qqline(model$residuals)
+hist(model$residuals)
+
+```

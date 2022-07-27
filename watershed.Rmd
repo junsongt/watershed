@@ -258,7 +258,7 @@ constructor input:
 # gridcode has to be integer, non-null
 # index has to be integer, non-null
 ```{r, echo=TRUE}
-Watershed = function(gridcode, index) {
+Watershed = function(gridcode) {
   # check shape & gridcode
   # (1) all inputs are correct
   index = which(GRIDINFO$gridcode == gridcode)
@@ -529,11 +529,6 @@ get.fraction = function(watersheds) {
 
 
 
-```{r, echo=TRUE}
-
-
-```
-
 
 ```{r, echo=TRUE}
 valid_gridcode = unlist(sapply(c(1:length(DATA)), FUN = function(i) {
@@ -543,7 +538,6 @@ valid_gridcode = unlist(sapply(c(1:length(DATA)), FUN = function(i) {
 ```
 
 
-# !!! cannot load all watersheds, crashes R session
 
 ```{r, echo=TRUE}
 start_time = Sys.time()
@@ -564,7 +558,6 @@ end_time - start_time
 
 ```{r, echo=TRUE}
 low_snow_gridcode = valid_fraction$gridcodes[valid_fraction$snow_fraction <= 0.03]
-
 
 ```
 

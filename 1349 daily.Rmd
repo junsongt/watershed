@@ -24,7 +24,7 @@ library(L1pack)
 # watershed 1349 has snow fraction 2%
 
 ```{r, echo=TRUE}
-data1349 = mget(load(paste0(PATH, "1349_dat.Rdata")))
+data1349 = DATA[[1349]]
 daily1349 = as.daily(data1349)
 # identifying the range of NA
 daily1349[is.na(daily1349$resp),]
@@ -54,17 +54,7 @@ pacf(error, main="pacf of residual")
 
 ```
 
-# model
-```{r, echo=TRUE}
-model = arima(error, order = c(3,0,0), include.mean = TRUE)
-acf(model$residuals)
-pacf(model$residuals, lag.max = 365)
-tsdiag(model)
-qqnorm(model$residuals)
-qqline(model$residuals)
-hist(model$residuals)
 
-```
 
 
 
@@ -91,9 +81,43 @@ legend("topright",legend=c("ts","loess", "stl"), lty=1,
 ```
 
 
-# model fitting
+
+
+
+# CV on seasonal
 ```{r, echo=TRUE}
-model = arima(error, order = c(5,0,0), include.mean = TRUE)
+start_time = Sys.time()
+cv.seasonal(ts1349, d.max=2, fold=5)
+end_time = Sys.time()
+end_time - start_time
+
+```
+Comment:
+$$span \in [\frac{10}{\sqrt{n}}, \frac{20}{\sqrt{n}}] \Rightarrow span = \frac{18}{\sqrt{n}}$$
+
+
+
+
+
+# CV on trend
+```{r, echo=TRUE}
+set.seed(2022)
+start_time = Sys.time()
+cv.trend(ts1409 - seasonal.loess(ts1349, deg=1,span=0.1508668), d.max=2, fold=5)
+end_time = Sys.time()
+end_time - start_time
+
+```
+
+
+
+
+
+
+
+# model
+```{r, echo=TRUE}
+model = arima(error, order = c(3,0,0), include.mean = TRUE)
 acf(model$residuals)
 pacf(model$residuals, lag.max = 365)
 tsdiag(model)
@@ -102,3 +126,6 @@ qqline(model$residuals)
 hist(model$residuals)
 
 ```
+
+
+

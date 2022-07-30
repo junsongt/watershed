@@ -247,16 +247,14 @@ attributes:
 
 
 method:
-# get_fraction()
-# render_plot
+# snow.fraction()
+# get.fraction()
+# plot.watersheds()
 # ...
 
 
 constructor input:
-#data: has to be in list form(data frame containing covariates), because it has to contain snow, rain, temp, resp
-# (i.e. RData, data frame), also could be null
 # gridcode has to be integer, non-null
-# index has to be integer, non-null
 ```{r, echo=TRUE}
 Watershed = function(gridcode) {
   # check shape & gridcode
@@ -637,8 +635,6 @@ load.content = function(watersheds, option) {
 # content: 
 # map: boolean - TRUE puts boundaries on a map;
 plot.shape = function(shapes, content=NULL, map=TRUE, option="fraction") {
-  # center_longs = shapes$Longitude
-  # center_lats = shapes$Latitude
   # list of x coord(longitude) of centroid
   center_longs = NULL
   # list of y coord(latitude) of centroid

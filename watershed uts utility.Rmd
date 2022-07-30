@@ -19,7 +19,7 @@ library(stlplus)
 
 
 
-#===========================================================================================
+#=========================================================================================
 # Format the time series
 ```{r, echo=TRUE}
 # month-format
@@ -632,9 +632,10 @@ $$\text{In k-fold CV, }\sum_{j=1}^k n_j = n$$
 
 $$\text{span.max} = \frac{k}{\sqrt{n}}$$
 
+# common suggestion of truncation point M = 2*sqrt(N);(M<N)
 #cv.seasonal
 ```{r, echo=TRUE}
-cv.seasonal = function(ts, d.max=2, span.min=0.01, span.max, span.control=0.01, fold=5) {
+cv.seasonal = function(ts, d.max=2, span.min=NULL, span.max=NULL, span.control=NULL, fold=5) {
   start_year = tsp(ts)[1]
   end_year = tsp(ts)[2]
   k = floor(end_year-start_year)+1 #k = 38 years
@@ -645,7 +646,20 @@ cv.seasonal = function(ts, d.max=2, span.min=0.01, span.max, span.control=0.01, 
   best_degree = 0
   best_span = span.min
   
-  for (d in (0:d.max)) {
+  n = length(ts)
+  if (is.null(span.min)) {
+    span.min = 10/sqrt(n)
+  }
+  
+  if (is.null(span.max)) {
+    span.max = 20/sqrt(n)
+  }
+  
+  if (is.null(span.control)) {
+    span.control = (span.max - span.min) / 10
+  }
+  
+  for (d in (1:d.max)) {
     for (s in seq(from=span.min, to=span.max, by=span.control)) {
       whole_pred = NULL
       # run 5 times CV
@@ -682,19 +696,12 @@ cv.seasonal = function(ts, d.max=2, span.min=0.01, span.max, span.control=0.01, 
 ```
 
 
-```{r, echo=TRUE}
-start_time = Sys.time()
-cv.seasonal(ts1409, d.max=2, span.min=0.05, span.max=0.5, span.control=0.05, fold=5)
-end_time = Sys.time()
-end_time - start_time
-
-```
 
 
 
 #cv.trend
 ```{r, echo=TRUE}
-cv.trend = function(ts, d.max = 2, span.min=0.01, span.max, span.control=0.01, fold=5) {
+cv.trend = function(ts, d.max = 2, span.min=NULL, span.max=NULL, span.control=NULL, fold=5) {
   start_year = tsp(ts)[1]
   end_year = tsp(ts)[2]
   k = floor(end_year-start_year)+1 #k = 38 years
@@ -708,7 +715,20 @@ cv.trend = function(ts, d.max = 2, span.min=0.01, span.max, span.control=0.01, f
   best_degree = 0
   best_span = span.min
   
-  for (d in (0:d.max)) {
+  n = length(ts)
+  if (is.null(span.min)) {
+    span.min = 0.1/sqrt(n)
+  }
+  
+  if (is.null(span.max)) {
+    span.max = 1/sqrt(n)
+  }
+  
+  if (is.null(span.control)) {
+    span.control = (span.max - span.min) / 10
+  }
+  
+  for (d in (1:d.max)) {
     for (s in seq(from=span.min, to=span.max, by=span.control)) {
       whole_pred = NULL
       # run 5 times CV
@@ -755,14 +775,7 @@ cv.trend = function(ts, d.max = 2, span.min=0.01, span.max, span.control=0.01, f
 
 
 
-```{r, echo=TRUE}
-set.seed(2022)
-start_time = Sys.time()
-cv.trend(ts1409, d.max=2, span.max=1/38, fold=5)
-end_time = Sys.time()
-end_time - start_time
 
-```
 
 
 

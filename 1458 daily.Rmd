@@ -25,7 +25,7 @@ library(L1pack)
 # watershed 1458 has the largest snow fraction of all, which is 66%
 
 ```{r, echo=TRUE}
-data1458 = mget(load(paste0(PATH, "1458_dat.Rdata")))
+data1458 = DATA[[1458]]
 daily1458 = as.daily(data1458)
 # identifying the range of NA
 daily1458[is.na(daily1458$resp),]
@@ -103,6 +103,43 @@ plot(convergence_list$ds, col="red", main="seasonal")
 
 
 ```
+
+
+
+
+# CV on seasonal
+```{r, echo=TRUE}
+start_time = Sys.time()
+cv.seasonal(ts1458, d.max=2, fold=5)
+end_time = Sys.time()
+end_time - start_time
+
+```
+Comment:
+$$span \in [\frac{10}{\sqrt{n}}, \frac{20}{\sqrt{n}}] \Rightarrow span = \frac{14}{\sqrt{n}}$$
+
+
+
+
+
+# CV on trend
+```{r, echo=TRUE}
+set.seed(2022)
+start_time = Sys.time()
+cv.trend(ts1409 - seasonal.loess(ts1409, deg=1,span=0.1273659), d.max=2, fold=5)
+end_time = Sys.time()
+end_time - start_time
+
+```
+
+
+
+
+
+
+
+
+
 
 
 # model fitting

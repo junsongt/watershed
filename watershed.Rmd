@@ -22,6 +22,12 @@ library(raster)
 library(maptiles)
 library(shiny)
 library(ggplot2)
+library(gridExtra)
+library(grid)
+library(mapview)
+library(leafpop)
+library(stlplus)
+library(ggpubr)
 ```
 
 
@@ -301,25 +307,6 @@ end_time-start_time
 ```{r, echo=TRUE}
 # TODO
 # gridcodes: vector of gridcode, i.e.c(1003, 1013, 1409), c(1,10,1001,1409)
-# find_watersheds = function() {}
-# search by indices: another option
-# load.watersheds = function(gridcodes) {
-#   watersheds = list()
-#   for (i in (1:length(gridcodes))) {
-#     gc = gridcodes[i]
-#     filename = paste0(gc, "_dat.RData")
-#     if (!(filename %in% FILENAMES)) {
-#       data = NULL
-#     } else {
-#       data = mget(load(paste0(PATH, filename)))
-#     }
-#     index = which(SHAPES$gridcode == gc)
-#     ws = Watershed(data, gc, index)
-#     watersheds[[i]] = ws
-#   }
-#   return (watersheds)
-#   
-# }
 
 # load.watersheds = function(gridcodes) {
 #   watersheds = list()
@@ -364,54 +351,55 @@ end_time-start_time
 =========================================================================================
 # Arithmetic
 
-```{r, echo=TRUE}
-snow.fraction.by.gc = function(gridcode) {
-  data = DATA[[gridcode]]
-  if (is.null(data)) {
-    return (NA)
-  }
-  else {
-    mts = mts(data)
-    snow = mts$snow
-    rain = mts$rain
-    snow_sum = 0
-    rain_sum = 0
-    for (i in (1:length(snow))) {
-      s = snow[i]
-      r = rain[i]
-      # both snow and rain have to be non NA!
-      if (!is.na(s) && !is.na(r)) {
-        snow_sum = snow_sum + s
-        rain_sum = rain_sum + r
-      }
-    }
-    snow_ratio = snow_sum / (snow_sum + rain_sum)
-    return (snow_ratio)
-  }
-}
 
-rain.fraction.by.gc = function(gridcode) {
-  return (1 - snow.fraction.by.gc(gridcode))
-}
+<!-- ```{r, echo=TRUE} -->
+<!-- snow.fraction.by.gc = function(gridcode) { -->
+<!--   data = DATA[[gridcode]] -->
+<!--   if (is.null(data)) { -->
+<!--     return (NA) -->
+<!--   } -->
+<!--   else { -->
+<!--     mts = mts(data) -->
+<!--     snow = mts$snow -->
+<!--     rain = mts$rain -->
+<!--     snow_sum = 0 -->
+<!--     rain_sum = 0 -->
+<!--     for (i in (1:length(snow))) { -->
+<!--       s = snow[i] -->
+<!--       r = rain[i] -->
+<!--       # both snow and rain have to be non NA! -->
+<!--       if (!is.na(s) && !is.na(r)) { -->
+<!--         snow_sum = snow_sum + s -->
+<!--         rain_sum = rain_sum + r -->
+<!--       } -->
+<!--     } -->
+<!--     snow_ratio = snow_sum / (snow_sum + rain_sum) -->
+<!--     return (snow_ratio) -->
+<!--   } -->
+<!-- } -->
 
-```
+<!-- rain.fraction.by.gc = function(gridcode) { -->
+<!--   return (1 - snow.fraction.by.gc(gridcode)) -->
+<!-- } -->
 
-
-```{r, echo=TRUE}
-get.fraction.by.gc = function(gridcodes) {
-  snow_fraction = NULL
-  rain_fraction = NULL
-  gridcode = NULL
-  for (gc in gridcodes) {
-    snow_fraction = c(snow_fraction, snow.fraction.by.gc(gc))
-    rain_fraction = c(rain_fraction, rain.fraction.by.gc(gc))
-  }
-  return (data.frame(gridcodes, snow_fraction, rain_fraction))
-  
-}
+<!-- ``` -->
 
 
-```
+<!-- ```{r, echo=TRUE} -->
+<!-- get.fraction.by.gc = function(gridcodes) { -->
+<!--   snow_fraction = NULL -->
+<!--   rain_fraction = NULL -->
+<!--   gridcode = NULL -->
+<!--   for (gc in gridcodes) { -->
+<!--     snow_fraction = c(snow_fraction, snow.fraction.by.gc(gc)) -->
+<!--     rain_fraction = c(rain_fraction, rain.fraction.by.gc(gc)) -->
+<!--   } -->
+<!--   return (data.frame(gridcodes, snow_fraction, rain_fraction)) -->
+
+<!-- } -->
+
+
+<!-- ``` -->
 
 
 
@@ -445,9 +433,35 @@ get.fraction.by.gc = function(gridcodes) {
 # }
 
 
+# snow.fraction = function(watershed) {
+#   gridcode = watershed$gridcode
+#   return (snow.fraction.by.gc(gridcode))
+# }
+
 snow.fraction = function(watershed) {
   gridcode = watershed$gridcode
-  return (snow.fraction.by.gc(gridcode))
+  data = DATA[[gridcode]]
+  if (is.null(data)) {
+    return (NA)
+  }
+  else {
+    mts = mts(data)
+    snow = mts$snow
+    rain = mts$rain
+    snow_sum = 0
+    rain_sum = 0
+    for (i in (1:length(snow))) {
+      s = snow[i]
+      r = rain[i]
+      # both snow and rain have to be non NA!
+      if (!is.na(s) && !is.na(r)) {
+        snow_sum = snow_sum + s
+        rain_sum = rain_sum + r
+      }
+    }
+    snow_ratio = snow_sum / (snow_sum + rain_sum)
+    return (snow_ratio)
+  }
 }
 
 # rain fraction
@@ -467,63 +481,28 @@ rain.fraction = function(watershed) {
 
 ```{r, echo=TRUE}
 # input: watersheds = list(ws1, ws2...) ws watershed object
-# get.fraction = function(watersheds) {
-#   snow_fraction = NULL
-#   rain_fraction = NULL
-#   gridcode = NULL
-#   for (ws in watersheds) {
-#     gridcode = c(gridcode, ws$gridcode)
-#     snow_fraction = c(snow_fraction, snow_fraction(ws))
-#     rain_fraction = c(rain_fraction, rain_fraction(ws))
-#   }
-#   return (data.frame(gridcode, snow_fraction, rain_fraction))
-#   
-# }
-
-
 get.fraction = function(watersheds) {
-  gridcodes = sapply(watersheds, FUN=function(x){x$gridcode})
-  return (get.fraction.by.gc(gridcodes))
+  snow_fraction = NULL
+  rain_fraction = NULL
+  gridcode = NULL
+  for (ws in watersheds) {
+    gridcode = c(gridcode, ws$gridcode)
+    snow_fraction = c(snow_fraction, snow.fraction(ws))
+    rain_fraction = c(rain_fraction, rain.fraction(ws))
+  }
+  return (data.frame(gridcode, snow_fraction, rain_fraction))
+
 }
 
 
+# get.fraction = function(watersheds) {
+#   gridcodes = sapply(watersheds, FUN=function(x){x$gridcode})
+#   return (get.fraction.by.gc(gridcodes))
+# }
+
+
+
 ```
-
-
-# Archive
-
-<!-- ```{r, echo=TRUE} -->
-<!-- get_fraction = function(shapes) { -->
-<!--   grid_codes = shapes$gridcode -->
-<!--   snow_ratios = NULL -->
-<!--   rain_ratios = NULL -->
-<!--   for (i in (1:length(grid_codes))) { -->
-<!--     filename = paste0(grid_codes[i], "_dat.RData") -->
-<!--     # exception handling -->
-<!--     if (!(filename %in% fileNames)) { -->
-<!--       snow_ratios = c(snow_ratios, NA) -->
-<!--       rain_ratios = c(rain_ratios, NA) -->
-<!--     } -->
-<!--     else { -->
-<!--       data = mget(load(paste0(path, grid_codes[i], "_dat.RData"))) -->
-<!--       sr = snow_fraction(data) -->
-<!--       rr = rain_fraction(data) -->
-<!--       snow_ratios = c(snow_ratios, sr) -->
-<!--       rain_ratios = c(rain_ratios, rr) -->
-<!--     } -->
-<!--   } -->
-<!--   return (data.frame(grid_codes, snow_ratios, rain_ratios)) -->
-<!-- } -->
-<!-- ``` -->
-
-
-<!-- #test -->
-<!-- ```{r, echo=TRUE} -->
-<!-- # indices = c(1061, 1273, 1368) -> watershed file:(1003, 1013, 1409) -->
-<!-- get_fraction(shapes[c(1061,1273,1368)]) -->
-<!-- render_piechart(shapes[c(1061,1273,1368)]) -->
-
-<!-- ``` -->
 
 
 
@@ -571,6 +550,24 @@ low_snow_gridcode = valid_fraction$gridcodes[valid_fraction$snow_fraction <= 0.0
 ```{r, echo = TRUE}
 # input: list of Watershed object
 # return: content => list of HTML string
+show.basic = function(watersheds) {
+  content = NULL
+  for (ws in watersheds) {
+    content = c(content, paste0("<br>gridcode:", ws$gridcode,
+                                "<br>name:", ws$name,
+                                "<br>station ID:", GRIDINFO[ws$index,]$Station_ID,
+                                "<br>longitude:", GRIDINFO[ws$index,]$Longitude,
+                                "<br>latitude:", GRIDINFO[ws$index,]$Latitude))
+  
+  }
+  return (content)
+}
+
+
+
+
+# input: list of Watershed object
+# return: content => list of HTML string
 show.fraction = function(watersheds) {
   content = NULL
   for (i in (1:length(watersheds))) {
@@ -579,46 +576,69 @@ show.fraction = function(watersheds) {
     rr = stats[i,][3]
     if (is.na(sr) || is.na(rr)) {
       content = c(content, paste0("<br>watershed:", stats[i,][1], 
-                                  "<br>snow fraction:", stats[i,][2],
-                                  "<br>rain fraction:", stats[i,][3]))
+                                  "<br>snow fraction:", sr,
+                                  "<br>rain fraction:", rr))
     } else {
       content = c(content, paste0("<br>watershed:", stats[i,][1], 
-                                  "<br>snow fraction:", round(stats[i,][2],2)*100,"%",
-                                  "<br>rain fraction:", round(stats[i,][3],2)*100,"%"))
+                                  "<br>snow fraction:", round(sr,2)*100,"%",
+                                  "<br>rain fraction:", round(rr,2)*100,"%"))
     }
   }
   return (content)
 }
 
+
+
 # input: list of Watershed object
 # return: content => list of HTML string
-show.ts = function(watersheds) {
-  content = NULL
+show.ts = function(watersheds, option) {
+  content = list()
   for (i in (1:length(watersheds))) {
-    if (!is.null(watersheds[[i]])) {
+    ws = watersheds[[i]]
+    data = DATA[[ws$gridcode]]
+    if (!is.null(data)) {
+      ts = mts(data)[,option]
       
-    } else {
-      content = c(content, "<br>no data")
+      p = autoplot(ts)
+      
+      # stl_obj = stlplus(ts, s.window="periodic")
+      # time = stl_obj$time
+      # raw = stl_obj$data$raw
+      # seasonal = stl_obj$data$seasonal
+      # trend = stl_obj$data$trend
+      # remainder = stl_obj$data$remainder
+      # p1 = ggplot(data.frame(time, raw), aes(x=time, y=raw))+ geom_line()
+      # p2 = ggplot(data.frame(time, seasonal), aes(x=time, y=seasonal))+ geom_line()
+      # p3 = ggplot(data.frame(time, trend), aes(x=time, y=trend))+ geom_line()
+      # p4 = ggplot(data.frame(time, remainder), aes(x=time, y=remainder))+ geom_line()
+      # p = arrangeGrob(p1,p2,p3,p4,nrow = 4)
+      # p = ggpubr::as_ggplot(p)
+      
+      
+      # ggsave(filename = "plot.jpg", plot = p)
+      # content = c(content, "<img src= 'D:/NSERC/project/watershed/plot.jpg' />")
+      content[[i]] = p
+    } 
+    else {
+      p = ggplot(data.frame()) + geom_line() + xlim(1980, 2020) + ylim(0, 50)
+      content[[i]] = p
     }
     
   }
   return (content)
 }
 
-# input: list of Watershed object
-# return: content => list of HTML plot
-show.plot = function(watersheds, option) {
-  plot = NULL
-  
-  return (plot)
-}
+
 
 load.content = function(watersheds, option) {
   content = NULL
   switch(option,
+         "info" = {content = show.basic(watersheds)},
          "fraction" = {content = show.fraction(watersheds)},
-         "time series" = {content = show.ts(watersheds)},
-         "piechart" = {content = show.plot(watersheds)}
+         "rain" = {content = show.ts(watersheds, option="rain")},
+         "snow" = {content = show.ts(watersheds, option="snow")},
+         "temp" = {content = show.ts(watersheds, option="temp")},
+         "gauge" = {content = show.ts(watersheds, option="resp")},
          
   )
   return (content)
@@ -634,7 +654,7 @@ load.content = function(watersheds, option) {
 # shapes: a set of shape objects, e.g., shp_dat[1:3];
 # content: 
 # map: boolean - TRUE puts boundaries on a map;
-plot.shape = function(shapes, content=NULL, map=TRUE, option="fraction") {
+plot.shape = function(shapes, content=NULL, map=TRUE, option) {
   # list of x coord(longitude) of centroid
   center_longs = NULL
   # list of y coord(latitude) of centroid
@@ -644,13 +664,25 @@ plot.shape = function(shapes, content=NULL, map=TRUE, option="fraction") {
     center_lats = c(center_lats, mean(geom(shapes[i])[,4]))
   }
   
+  
   if (map) {
     # leaflet(sf::st_as_sf(shapes)) %>% addTiles() %>% addPolygons(fillOpacity=0.1) %>% addMarkers(lng=center_longs, lat=center_lats, popup=content) 
     # %>% addPopups(center_longs, center_lats, popup=content, options = popupOptions(closeButton = TRUE))
     m = leaflet(sf::st_as_sf(shapes))
     m = addTiles(m) 
     m = addPolygons(m, fillOpacity=0.1)
-    m = addMarkers(m, lng=center_longs, lat=center_lats, popup=content)
+    # m = addMarkers(m, lng=center_longs, lat=center_lats, popup=content)
+    if (option %in% c("rain", "snow", "temp", "gauge")) {
+      pt = data.frame(center_longs, center_lats)
+      # pt = st_as_sf(pt, coords = c("center_longs", "center_lats"))
+      m = addMarkers(m, lng=center_longs, lat=center_lats, group="pt")
+      m = addPopupGraphs(map=m, graph=content, group="pt", width=1000, height=500)
+
+      
+    } 
+    else {
+      m = addMarkers(m, lng=center_longs, lat=center_lats, popup=content)
+    }
     # # mouse hovering to get content
     # m = addMarkers(m, lng=center_longs, lat=center_lats, label=lapply(content, HTML))
     m
@@ -666,7 +698,7 @@ plot.shape = function(shapes, content=NULL, map=TRUE, option="fraction") {
 
 
 # watersheds: list of watershed objects
-plot.watersheds = function(watersheds, map = TRUE, option = "fraction") {
+plot.watersheds = function(watersheds, map = TRUE, option) {
   content = load.content(watersheds, option)
   indices = sapply(watersheds, FUN=function(ws){ws$index})
   shapes = SHAPES[indices]
@@ -684,8 +716,8 @@ plot.watersheds = function(watersheds, map = TRUE, option = "fraction") {
 # plot_shape(SHAPES[c(1061,1273,1368)], map=TRUE, "fraction")
 # plot_shape(SHAPES[c(1061,1273,1368)], map=FALSE, "fraction")
 
-plot.watersheds(watersheds=load.watersheds(c(1003,1013,1409)), map=TRUE)
-plot.watersheds(watersheds=load.watersheds(c(1, 77, 101, 31)), map=TRUE)
+plot.watersheds(watersheds=load.watersheds(c(1,1013,1409)), map=TRUE, option="gauge")
+plot.watersheds(watersheds=load.watersheds(c(1, 77, 101, 31)), map=TRUE, option="fraction")
 
 ```
 

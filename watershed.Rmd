@@ -534,7 +534,7 @@ end_time - start_time
 
 
 ```{r, echo=TRUE}
-low_snow_gridcode = valid_fraction$gridcodes[valid_fraction$snow_fraction <= 0.03]
+low_snow_gridcode = valid_fraction$gridcode[valid_fraction$snow_fraction <= 0.03]
 
 ```
 

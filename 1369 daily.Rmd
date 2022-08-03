@@ -1,0 +1,103 @@
+---
+title: "1369"
+author: "Junsong Tang"
+date: "2022-08-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tseries)
+library(xts)
+library(zoo)
+library(tidyverse)
+library(forecast)
+library(stlplus)
+library(seasonal)
+library(L1pack)
+
+
+```
+
+
+
+# watershed 1369 has the lowest snow fraction of all, which is 1%
+
+```{r, echo=TRUE}
+data1369 = DATA[[1369]]
+daily1369 = as.daily(data1369)
+# identifying the range of NA
+daily1369[is.na(daily1369$resp),]
+
+ts1369 = ts(log(daily1369$resp), start=c(1980,1), frequency = 365)
+plot(ts1369, ylim=c(-5,5))
+acf(ts1369, lag.max = 365*5, main = "acf of daily response", na.action = na.pass)
+pacf(ts1369, lag.max = 365*5, main = "pacf of daily respoonse", na.action = na.pass)
+```
+
+```{r, echo=TRUE}
+spec1369 = spectrum(ts1369, na.action=na.exclude, xlim = c(0,0.02), ylim=c(10, 10000), type = "h")
+spec_chart1369 = data.frame(period=1/spec1369$freq, frequency=spec1369$freq, spectrum=spec1369$spec)
+head(spec_chart1369[order(spec_chart1369$spectrum, decreasing=TRUE),], 10)
+
+```
+
+
+
+#stl plus
+```{r, echo=TRUE}
+stlp1369 = stlplus(ts1369, n.p=365, s.window="periodic", inner=2, outer=10)
+# my_s = seasonal.loess(ts1409, deg=1, span=0.1273659)
+# my_t = trend.loess(ts1409-my_s, deg=1, span=0.0008491057)
+plot(stlp1369)
+
+```
+
+
+
+# seasonality
+```{r, echo=TRUE}
+decomp1369 = decompose.loess(ts1369)
+```
+
+
+
+```{r, echo=TRUE}
+# trend compare
+plot(ts1369, type="l", col="green", ylim=c(-5,5), main="1369 trend compare")
+lines(decomp1369$trend, col="red")
+lines(ts(stlp1369$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
+legend("topright",legend=c("ts","loess", "stl_plus"), lty=1, col=c("green","red", "blue"))
+
+
+# seasonal compare
+plot(ts1369, type="l", col="green", xlim=c(1980,1982), ylim=c(-5,5), main="1369 seasonal compare")
+lines(decomp1369$seasonal, col="red")
+lines(ts(stlp1369$data[,"seasonal"], start =c(1980,1), frequency = 365), col="blue")
+legend("topright",legend=c("ts","loess", "stl_plus"), lty=1, col=c("green","red", "blue"))
+
+
+# remainder compare
+plot(ts1369, type="l", col="green", ylim=c(-5,5), main="1369 remainder compare")
+lines(decomp1369$remainder, col="red")
+lines(ts(stlp1369$data[,"remainder"], start =c(1980,1), frequency = 365), col="blue")
+legend("topright",legend=c("ts","loess", "stl_plus"), lty=1, col=c("green","red", "blue"))
+
+```
+
+
+
+
+```{r, echo=TRUE}
+mean((ts1369 - decomp1369$trend)^2, na.rm=TRUE)
+mean((ts1369 - ts(stlp1369$data[,"trend"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
+
+mean((ts1369 - decomp1369$seasonal)^2, na.rm=TRUE)
+mean((ts1369 - ts(stlp1369$data[,"seasonal"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
+
+
+mean((decomp1369$remainder)^2, na.rm = TRUE)
+mean((ts(stlp1369$data[,"remainder"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
+
+```

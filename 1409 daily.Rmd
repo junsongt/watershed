@@ -29,7 +29,7 @@ daily1409[is.na(daily1409$resp),]
 
 # subset of log-daily from 1980.1 - 1994.12(15 years)
 ts1409 = ts(log(daily1409$resp), start=c(1980,1), frequency = 365)
-plot(ts1409)
+plot(ts1409,ylim=c(-5,5))
 acf(ts1409, lag.max = 365*5, main = "acf of daily response", na.action = na.pass)
 pacf(ts1409, lag.max = 365*5, main = "pacf of daily respoonse", na.action = na.pass)
 
@@ -43,57 +43,16 @@ pacf(ts1409, lag.max = 365*5, main = "pacf of daily respoonse", na.action = na.p
 ```
 
 
-
-
-#========================================================================================
-# STL decomposition
-```{r echo=TRUE}
-# stl_obj = stlplus(daily_train, s.window = "periodic", s.degree = 2)
-na.new = function(x) {ts(zoo::na.approx(x), start = c(1980,1), frequency = 365)}
-stl_obj = stl(ts1409, s.window = "periodic", na.action = na.new)
-plot(stl_obj)
-# check residuals
-# daily_ts has length 13870; while residual has 13398, probably due to NAs in raw ts.
-error = stl_obj$time.series[,"remainder"]
-qqnorm(error)
-qqline(error)
-acf(error, lag.max= 365*5, main="acf of residual")
-pacf(error, lag.max = 365*3, main="pacf of residual")
-pacf(error, main="pacf of residual")
-
-
-```
-
-
-
-
-
-
-
-
-
-
-# My method
-#=========================================================================================
-# Seasonality
-
-
-# runtime for seasonality
-```{r, echo=TRUE}
-start_time = Sys.time()
-# keep the outliers
-s1 = my.seasonal(ts1409, window = 51, degree = 2, trim=0)
-end_time = Sys.time()
-end_time - start_time
-
-```
+# p = TSA::periodogram(window(ts1409, start=c(1980, 1), end=c(1996,12)), xlim = c(0,0.01))
+# d = data.frame(freq=p$freq, spec=p$spec)
+# order = d[order(-d$spec),]
+# top5 = head(order, 5)
+# 1/top5$freq
 
 ```{r, echo=TRUE}
-start_time = Sys.time()
-# remove the outliers
-s2 = my.seasonal(ts1409, window = 51, degree = 2, trim=0.25)
-end_time = Sys.time()
-end_time - start_time
+spec1409 = spectrum(ts1409, na.action=na.exclude, xlim = c(0,0.02), ylim=c(10, 10000), type = "h")
+spec_chart1409 = data.frame(period=1/spec1409$freq, frequency=spec1409$freq, spectrum=spec1409$spec)
+head(spec_chart1409[order(spec_chart1409$spectrum, decreasing=TRUE),], 10)
 
 ```
 
@@ -101,160 +60,6 @@ end_time - start_time
 
 
 
-
-# plot seasonality
-```{r, echo=TRUE}
-plot(s1, type ="l", xlim = c(1980,1983), col = "black", main="s1&s2: with/without outliers")
-lines(s2, type = "l", xlim = c(1980, 1983), col = "red")
-legend("bottomright",legend=c("outlier","no outlier"), lty=1,
-       col=c("black","red"))
-
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-# test
-```{r, echo=TRUE}
-start_time = Sys.time()
-s_opt = my.seasonal(ts1409, window=11, degree=0, trim=0.05)
-end_time = Sys.time()
-end_time - start_time
-plot(ts1409, col = "green", xlim=c(1980,2000), ylim=c(-5,5), type="l", main="best seasonality(11, 0, 5%) & raw ts")
-lines(s_opt, col = "blue")
-lines(stl_obj$time.series[,"seasonal"], col = "red")
-legend("bottomright",legend=c("ts","mine", "stl"), lty=1,
-       col=c("green","blue","red"))
-
-# remain = daily_ts - best_seasonal
-# obj = stl(remain, s.window = "periodic", na.action = na.pass)
-# plot(obj)
-
-```
-
-
-
-
-
-
-
-
-#==========================================================================================
-# Trend
-
-
-# test
-```{r, echo=TRUE}
-start_time = Sys.time()
-t1 = my.trend(ts1409)
-end_time = Sys.time()
-end_time - start_time
-plot(ts1409, ylim = c(-5,5), type = "l", col = "green", main="trend in ts")
-lines(t1, col = "blue")
-lines(stl_obj$time.series[,"trend"], col = "red")
-legend("bottomright",legend=c("ts","mine", "stl"), lty=1,
-       col=c("green","blue","red"))
-```
-
-
-
-
-```{r, echo=TRUE}
-res = ts1409 - s_opt - t1
-
-qqnorm(res)
-qqline(res)
-par(mar=c(5,4,4,2)+0.1)
-acf(res[!is.na(res)], lag.max= 365*5, main="acf of residual")
-pacf(res[!is.na(res)], lag.max = 365*3, main="pacf of residual")
-pacf(res[!is.na(res)], main="pacf of residual")
-
-
-# model = arima(res, order = c(5,0,0), include.mean = TRUE)
-# acf(model$residuals)
-# pacf(model$residuals, lag.max = 365)
-tsdiag(arima(res[!is.na(res)], order = c(5,0,0), include.mean = TRUE))
-
-hist(error, main="residual by stl")
-
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# LOESS
-#==========================================================================================
-# loess method
-
-#preparation
-```{r, echo=TRUE}
-# NA removal version
-same_day_frame = function(ts) {
-  # number of years
-  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
-  freq = as.integer(tsp(ts)[3])
-
-  x = NULL
-  y = NULL
-  for (i in (1:freq)) {
-    indices = seq(from=i, to=i+(k-1)*freq, by=freq)
-    cluster = ts[indices]
-    # clear out NA
-    cluster = cluster[!is.na(cluster)]
-
-    x = c(x, rep(i, length(cluster)))
-    y = c(y, cluster)
-    
-  }
-  df = data.frame(x, y)
-  return (df)
-}
-
-## NA kept version
-# same_day_frame = function(ts) {
-#   # number of years
-#   k = floor(tsp(ts)[2]-tsp(ts)[1])+1
-#   freq = as.integer(tsp(ts)[3])
-#   
-#   m = matrix(ts, byrow = TRUE, nrow=k)
-#   x = rep(1:freq, each = length(m[,1]))
-#   y = as.vector(m)
-#   return (data.frame(x, y))
-# }
-
-
-```
-
-```{r, echo=TRUE}
-start_time = Sys.time()
-df = same_day_frame(ts1409)
-end_time = Sys.time()
-end_time - start_time
-
-
-```
 
 
 
@@ -274,10 +79,10 @@ $$span \in [\frac{10}{\sqrt{n}}, \frac{20}{\sqrt{n}}] \Rightarrow span = \frac{1
 
 
 # CV on trend
-```{r, echo=TRUE}
+```{r, echo=TRUE, warning=FALSE}
 set.seed(2022)
 start_time = Sys.time()
-cv.trend(ts1409 - seasonal.loess(ts1409, deg=1, span=0.1273659), d.max=2, fold=5)
+cv.trend(ts1409 - seasonal.loess(ts1409, deg=1, span=15/sqrt(length(ts1409))), d.max=2, fold=5)
 end_time = Sys.time()
 end_time - start_time
 
@@ -292,90 +97,36 @@ Comment: the smaller the span on trend, the higher the degree, the better
 
 
 
-
 ```{r, echo=TRUE}
-
-plot(ts1409 - seasonal.loess(ts1409, deg=1,span=0.1273659))
+convergence.test(ts1409, iter=5)
 
 ```
 
 
+
+
+
+
+
+
+
+#stl plus
 ```{r, echo=TRUE}
-stl_plus = stlplus(ts1409, n.p=365, s.window="periodic")
+stlp1409 = stlplus(ts1409, n.p=365, s.window="periodic", inner=2, outer=10)
 # my_s = seasonal.loess(ts1409, deg=1, span=0.1273659)
 # my_t = trend.loess(ts1409-my_s, deg=1, span=0.0008491057)
-my_s = seasonal.loess(ts1409, deg=1, span=1/38)
-my_t = trend.loess(ts1409-my_s, deg=1, span=1.5/((1-(1.5/365))*38))
-```
-
-
-```{r, echo=TRUE}
-plot(ts1409, type="l", col="green", xlim=c(1980,1983), ylim=c(-5,5), main="seasonality compare")
-lines(my_s, col="red")
-lines(stl_obj$time.series[,"seasonal"], col = "blue")
-lines(ts(stl_plus$data[,"seasonal"], start =c(1980,1), frequency = 365), col="brown")
-legend("topright",legend=c("ts","loess", "stl","stl_plus"), lty=1,
-       col=c("green","red","blue", "brown"))
-
-
-```
-
-```{r, echo=TRUE}
-plot(ts1409, type="l", col="green", ylim=c(-5,5), main="trend compare")
-lines(my_t, col="red")
-lines(stl_obj$time.series[,"trend"], col = "blue")
-lines(ts(stl_plus$data[,"trend"], start =c(1980,1), frequency = 365), col="brown")
-legend("topright",legend=c("ts","loess", "stl","stl_plus"), lty=1,
-       col=c("green","red","blue", "brown"))
-
-```
-
-```{r, echo=TRUE}
-plot(ts1409-my_s-my_t, col="red")
-lines(ts(stl_plus$data[,"remainder"], start=c(1980,1),frequency = 365),col="blue")
-
-```
-
-
-
-```{r, echo=TRUE}
-
-error1 = ts1409-my_s-my_t
-error2 = ts(stl_plus$data[,"remainder"], start=c(1980,1),frequency = 365)
-
-
-
-model1 = arima(error1, order = c(5,0,0), include.mean = TRUE)
-acf(model$residuals)
-pacf(model$residuals, lag.max = 365)
-tsdiag(model)
-qqnorm(model$residuals)
-qqline(model$residuals)
-hist(model$residuals)
-
-
-
+plot(stlp1409)
 
 ```
 
 
 
 
-# Convergence test
-#==========================================================================================
 
-
+# ma trend
 ```{r, echo=TRUE}
-start_time = Sys.time()
-convergence_list = convergence.test(ts1409, iter = 31)
-end_time = Sys.time()
-end_time - start_time
-par(mfrow=c(2,1))
-plot(convergence_list$dt, col="blue", main="trend")
-plot(convergence_list$ds, col="red", main="seasonal")
-# plot(convergence_list$dt, ylim=c(0,0.002), col="blue", main="trend")
-# plot(convergence_list$ds, ylim=c(0,0.002), col="red", main="seasonal")
-
+t = trend.ma(ts1409)
+s = seasonal.loess(ts1409 - t, deg=1, span = 1/38)
 ```
 
 
@@ -384,23 +135,107 @@ plot(convergence_list$ds, col="red", main="seasonal")
 
 
 ```{r, echo=TRUE}
-start_time = Sys.time()
-residual_list = residual.test(ts1409, iter = 51)
-end_time = Sys.time()
-end_time - start_time
-plot(residual_list, ylim=c(0,0.005))
+decomp1409 = decompose.loess(ts1409)
+```
+
+
+
+```{r, echo=TRUE}
+# trend compare
+plot(ts1409, type="l", col="green", ylim=c(-5,5), main="1409 trend compare")
+lines(decomp1409$trend, col="red")
+lines(t, col="orange")
+lines(ts(stlp1409$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
+legend("topright",legend=c("ts","loess","loess by MA", "stl_plus"), lty=1,
+       col=c("green","red","orange", "blue"))
+
+
+# seasonal compare
+plot(ts1409, type="l", col="green", xlim=c(1980,1982), ylim=c(-5,5), main="1409 seasonal compare")
+lines(decomp1409$seasonal, col="red")
+lines(s, col="orange")
+lines(ts(stlp1409$data[,"seasonal"], start =c(1980,1), frequency = 365), col="blue")
+legend("topright",legend=c("ts","loess","loess by MA", "stl_plus"), lty=1,
+       col=c("green","red","orange", "blue"))
+
+
+# remainder compare
+plot(ts1409, type="l", col="green", ylim=c(-5,5), main="1409 remainder compare")
+lines(decomp1409$remainder, col="red")
+lines(ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365), col="blue")
+legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
+       col=c("green","red", "blue"))
+
+```
+
+
+```{r, echo=TRUE}
+mean((ts1409 - decomp1409$trend)^2, na.rm=TRUE)
+mean((ts1409 - ts(stlp1409$data[,"trend"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
+
+mean((ts1409 - decomp1409$seasonal)^2, na.rm=TRUE)
+mean((ts1409 - ts(stlp1409$data[,"seasonal"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
+
+
+mean((decomp1409$remainder)^2, na.rm = TRUE)
+mean((ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
+
+```
+
+
+
+
+
+```{r, echo=TRUE}
+# sub_season = subseasonal.loess(decomp1409$remainder, freq = 365/2, deg=1, span=15/sqrt(length(ts1409)))
+plot(ts1409, type="l", col="green", ylim=c(-5,5))
+lines(seasonal.loess(decomp1409$remainder, deg=1, span=15/sqrt(length(ts1409))), col="red")
+
+acf(decomp1409$remainder, lag.max = 365*3, main = "acf of daily response", na.action = na.pass)
+pacf(decomp1409$remainder, lag.max = 50, main = "pacf of daily respoonse", na.action = na.pass)
 
 
 ```
+
+
+
+```{r, echo=TRUE}
+acf(ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365), lag.max = 365,  na.action = na.pass)
+pacf(ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365), lag.max = 50,  na.action = na.pass)
+
+```
+
+
+
+#short term trend
+```{r, echo=TRUE}
+short_trend = trend.loess(decomp1409$remainder, deg=2, span=90/length(ts1409))
+error = decomp1409$remainder - short_trend
+
+plot(ts1409, type="l", col="green", ylim=c(-5,5))
+lines(decomp1409$trend, col="red")
+lines(short_trend, col="blue")
+
+
+
+acf(error, lag.max = 365,  na.action = na.pass)
+pacf(error, lag.max = 50,  na.action = na.pass)
+
+
+
+```
+
+
 
 
 
 # model fitting
 ```{r, echo=TRUE}
-model = arima(error, order = c(5,0,0), include.mean = TRUE)
-acf(model$residuals)
-pacf(model$residuals, lag.max = 365)
+model = arima(ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365), order = c(5,0,0), include.mean = TRUE)
+acf(model$residuals, na.action = na.pass)
+pacf(model$residuals, lag.max=365*5, na.action = na.pass)
 tsdiag(model)
+plot(model$residuals, main="model residuals")
 qqnorm(model$residuals)
 qqline(model$residuals)
 hist(model$residuals)

@@ -31,39 +31,26 @@ daily1458 = as.daily(data1458)
 daily1458[is.na(daily1458$resp),]
 
 ts1458 = ts(log(daily1458$resp), start=c(1980,1), frequency = 365)
-plot(ts1458)
+plot(ts1458, ylim=c(-5,5))
 acf(ts1458, lag.max = 365*5, main = "acf of daily response", na.action = na.pass)
 pacf(ts1458, lag.max = 365*5, main = "pacf of daily respoonse", na.action = na.pass)
 ```
 
-
-
-# stl
 ```{r, echo=TRUE}
-na.new = function(x) {ts(zoo::na.approx(x), start = c(1980,1), frequency = 365)}
-stl1458 = stl(ts1458, s.window = "periodic", na.action = na.new)
-plot(stl1458)
-# check residuals
-# daily_ts has length 13870; while residual has 13398, probably due to NAs in raw ts.
-error = stl1458$time.series[,"remainder"]
-qqnorm(error)
-qqline(error)
-acf(error, lag.max= 365*5, main="acf of residual")
-pacf(error, lag.max = 365*3, main="pacf of residual")
-pacf(error, main="pacf of residual")
-
+spec1458 = spectrum(ts1458, na.action=na.exclude, xlim = c(0,0.02), ylim=c(10, 10000), type = "h")
+spec_chart1458 = data.frame(period=1/spec1458$freq, frequency=spec1458$freq, spectrum=spec1458$spec)
+head(spec_chart1458[order(spec_chart1458$spectrum, decreasing=TRUE),], 10)
 
 ```
 
-# model
+
+
+#stl plus
 ```{r, echo=TRUE}
-model = arima(error, order = c(3,0,0), include.mean = TRUE)
-acf(model$residuals)
-pacf(model$residuals, lag.max = 365)
-tsdiag(model)
-qqnorm(model$residuals)
-qqline(model$residuals)
-hist(model$residuals)
+stlp1458 = stlplus(ts1458, n.p=365, s.window="periodic", inner=2, outer=10)
+# my_s = seasonal.loess(ts1409, deg=1, span=0.1273659)
+# my_t = trend.loess(ts1409-my_s, deg=1, span=0.0008491057)
+plot(stlp1458)
 
 ```
 
@@ -71,72 +58,49 @@ hist(model$residuals)
 
 # seasonality
 ```{r, echo=TRUE}
-season1458 = seasonal.loess(ts1458, span=1/30)
-plot(ts1458, type="l", col="green", ylim=c(-10,10), main="seasonality compare")
-lines(season1458, col="red")
-lines(stl1458$time.series[,"seasonal"], col = "blue")
-legend("topright",legend=c("ts","loess", "stl"), lty=1,
-       col=c("green","red","blue"))
+decomp1458 = decompose.loess(ts1458)
 ```
 
 
-# trend
+
 ```{r, echo=TRUE}
-trend1458 = trend.loess(ts1458, span=2/39)
-plot(ts1458, type="l", col="green", ylim=c(-10,10), main="trend compare")
-lines(trend1458, col="red")
-lines(stl1458$time.series[,"trend"], col = "blue")
-legend("topright",legend=c("ts","loess", "stl"), lty=1,
-       col=c("green","red","blue"))
+# trend compare
+plot(ts1458, type="l", col="green", ylim=c(-5,5), main="1458 trend compare")
+lines(decomp1458$trend, col="red")
+lines(ts(stlp1458$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
+legend("topright",legend=c("ts","loess", "stl_plus"), lty=1, col=c("green","red", "blue"))
+
+
+# seasonal compare
+plot(ts1458, type="l", col="green", xlim=c(1980,1982), ylim=c(-5,5), main="1458 seasonal compare")
+lines(decomp1458$seasonal, col="red")
+lines(ts(stlp1458$data[,"seasonal"], start =c(1980,1), frequency = 365), col="blue")
+legend("topright",legend=c("ts","loess", "stl_plus"), lty=1, col=c("green","red", "blue"))
+
+
+# remainder compare
+plot(ts1458, type="l", col="green", ylim=c(-5,5), main="1458 remainder compare")
+lines(decomp1458$remainder, col="red")
+lines(ts(stlp1458$data[,"remainder"], start =c(1980,1), frequency = 365), col="blue")
+legend("topright",legend=c("ts","loess", "stl_plus"), lty=1, col=c("green","red", "blue"))
 
 ```
 
 
 
 
-
-```{r,echo=TRUE}
-convergence_list = convergence.test(ts1458, iter = 31)
-par(mfrow=c(2,1))
-plot(convergence_list$dt, col="blue", main="trend")
-plot(convergence_list$ds, col="red", main="seasonal")
-
-
-```
-
-
-
-
-# CV on seasonal
 ```{r, echo=TRUE}
-start_time = Sys.time()
-cv.seasonal(ts1458, d.max=2, fold=5)
-end_time = Sys.time()
-end_time - start_time
+mean((ts1458 - decomp1458$trend)^2, na.rm=TRUE)
+mean((ts1458 - ts(stlp1458$data[,"trend"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
+
+mean((ts1458 - decomp1458$seasonal)^2, na.rm=TRUE)
+mean((ts1458 - ts(stlp1458$data[,"seasonal"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
+
+
+mean((decomp1458$remainder)^2, na.rm = TRUE)
+mean((ts(stlp1458$data[,"remainder"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
 
 ```
-Comment:
-$$span \in [\frac{10}{\sqrt{n}}, \frac{20}{\sqrt{n}}] \Rightarrow span = \frac{14}{\sqrt{n}}$$
-
-
-
-
-
-# CV on trend
-```{r, echo=TRUE}
-set.seed(2022)
-start_time = Sys.time()
-cv.trend(ts1409 - seasonal.loess(ts1409, deg=1,span=0.1273659), d.max=2, fold=5)
-end_time = Sys.time()
-end_time - start_time
-
-```
-
-
-
-
-
-
 
 
 

@@ -508,7 +508,15 @@ trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) {
   x = c(1:n)
   loess_obj = loess(y ~ x, na.action=na.exclude, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
   na_index = which(is.na(ts))
-  y[-na_index] = loess_obj$fitted
+  # if no NAs
+  if (length(na_index) == 0) {
+    y = loess_obj$fitted
+  }
+  # if there are NAs
+  else {
+    y[-na_index] = loess_obj$fitted
+  }
+  
   if (impute) {
     y[na_index] = as.numeric(predict(object=loess_obj, newdata=data.frame(x=na_index)))
   }
@@ -873,8 +881,31 @@ decompose.loess = function(ts, s.deg=1, t.deg=1, s.window=NULL, t.window=NULL, i
 
 
 
+```{R, echo=TRUE}
 
+R1 = NULL
+R2 = NULL
+for (x in valid_gridcode) {
+  df = as.daily(DATA[[x]])
+  if (length(df$resp) >= 30*365) {
+    start_year = df$years[1]
+    if (0 %in% df$resp) {
+      ts = ts(df$resp, start=c(start_year,1), frequency = 365)
+    } else {
+      ts = ts(log(df$resp), start=c(start_year,1), frequency = 365)
+    }
+    stlp = stlplus(ts, n.p=365, s.window="periodic", inner=2, outer=10)
+    decomp = decompose.loess(ts)
+    R1 = c(R1, mean((decomp$remainder)^2, na.rm = TRUE)) 
+    R2 = c(R2, mean((ts(stlp$data[,"remainder"], start =c(start_year,1), frequency = 365))^2, na.rm=TRUE))
+  }
+  
+}
 
+plot(x=valid_gridcode, y=R1, type="p", col="red")
+points(x=valid_gridcode,y=R2, col="blue")
+
+```
 
 
 

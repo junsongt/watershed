@@ -539,7 +539,25 @@ low_snow_gridcode = valid_fraction$gridcode[valid_fraction$snow_fraction <= 0.03
 ```
 
 
+```{r, echo=TRUE}
+get.centroid = function(watersheds) {
+  # list of x coord(longitude) of centroid
+  longs = NULL
+  # list of y coord(latitude) of centroid
+  lats = NULL
+  shape_indices = sapply(watersheds, FUN=function(ws) {ws$index})
+  gridcodes = sapply(watersheds, FUN=function(ws) {ws$gridcode})
+  for (i in shape_indices) {
+    longs = c(longs, mean(geom(SHAPES[i])[,3]))
+    lats = c(lats, mean(geom(SHAPES[i])[,4]))
+  }
+  
+  return (data.frame(gridcode=gridcodes, longitude=longs, latitude=lats))
+}
 
+
+
+```
 
 
 
@@ -591,6 +609,7 @@ show.fraction = function(watersheds) {
 
 # input: list of Watershed object
 # return: content => list of HTML string
+# option = c("snow","rain","temp","resp")
 show.ts = function(watersheds, option) {
   content = list()
   for (i in (1:length(watersheds))) {
@@ -651,58 +670,50 @@ load.content = function(watersheds, option) {
 # TODO (under construction)
 # plot watersheds's boundaries(shapes)
 ```{r, echo=TRUE}
-# shapes: a set of shape objects, e.g., shp_dat[1:3];
-# content: 
-# map: boolean - TRUE puts boundaries on a map;
-plot.shape = function(shapes, content=NULL, map=TRUE, option) {
-  # list of x coord(longitude) of centroid
-  center_longs = NULL
-  # list of y coord(latitude) of centroid
-  center_lats = NULL
-  for (i in (1:length(shapes))) {
-    center_longs = c(center_longs, mean(geom(shapes[i])[,3]))
-    center_lats = c(center_lats, mean(geom(shapes[i])[,4]))
-  }
-  
-  
-  if (map) {
-    # leaflet(sf::st_as_sf(shapes)) %>% addTiles() %>% addPolygons(fillOpacity=0.1) %>% addMarkers(lng=center_longs, lat=center_lats, popup=content) 
-    # %>% addPopups(center_longs, center_lats, popup=content, options = popupOptions(closeButton = TRUE))
-    m = leaflet(sf::st_as_sf(shapes))
-    m = addTiles(m) 
-    m = addPolygons(m, fillOpacity=0.1)
-    # m = addMarkers(m, lng=center_longs, lat=center_lats, popup=content)
-    if (option %in% c("rain", "snow", "temp", "gauge")) {
-      pt = data.frame(center_longs, center_lats)
-      # pt = st_as_sf(pt, coords = c("center_longs", "center_lats"))
-      m = addMarkers(m, lng=center_longs, lat=center_lats, group="pt")
-      m = addPopupGraphs(map=m, graph=content, group="pt", width=1000, height=500)
-
-      
-    } 
-    else {
-      m = addMarkers(m, lng=center_longs, lat=center_lats, popup=content)
-    }
-    # # mouse hovering to get content
-    # m = addMarkers(m, lng=center_longs, lat=center_lats, label=lapply(content, HTML))
-    m
-  }
-  else {
-    plot(shapes)
-    # m = leaflet(sf::st_as_sf(shapes))
-    # m = addPolygons(m, fillOpacity=0.1)
-    # m = addMarkers(m, lng=center_longs, lat=center_lats, popup=content)
-    # m
-  }
-}
-
-
-# watersheds: list of watershed objects
-plot.watersheds = function(watersheds, map = TRUE, option) {
+# watersheds: list of watershed objects;
+# map: map provider, refer names(providers)
+# option:"info", "fraction", "snow", "rain", "temp", "gauge"
+plot.watersheds = function(watersheds, map="OpenStreetMap", option) {
   content = load.content(watersheds, option)
   indices = sapply(watersheds, FUN=function(ws){ws$index})
   shapes = SHAPES[indices]
-  plot.shape(shapes, content, map, option)
+  # list of x coord(longitude) (not necessarily of centroid)
+  longs = NULL
+  # list of y coord(latitude) (not necessarily of centroid)
+  lats = NULL
+  for (i in (1:length(shapes))) {
+    longs = c(longs, shapes[i]$Longitude)
+    lats = c(lats, shapes[i]$Latitude)
+  }
+  
+  # # if we want marker to be at centroid of shape
+  # centroids = get.centroid(watersheds)
+  # longs = centroids$longitude
+  # lats = centroids$latitude
+  
+  
+  
+  # leaflet(sf::st_as_sf(shapes)) %>% addTiles() %>% addPolygons(fillOpacity=0.1) %>% addMarkers(lng=longs, lat=lats, popup=content) 
+  # %>% addPopups(longs, lats, popup=content, options = popupOptions(closeButton = TRUE))
+  m = leaflet(sf::st_as_sf(shapes))
+  # m = addTiles(m) 
+  m = addProviderTiles(m, provider=map)
+  m = addPolygons(m, fillOpacity=0.1)
+  # m = addMarkers(m, lng=longs, lat=lats, popup=content)
+  if (option %in% c("rain", "snow", "temp", "gauge")) {
+    pt = data.frame(longs, lats)
+    # pt = st_as_sf(pt, coords = c("longs", "lats"))
+    m = addMarkers(m, lng=longs, lat=lats, group="pt")
+    m = addPopupGraphs(map=m, graph=content, group="pt", width=1000, height=500)
+    
+    
+  } 
+  else {
+    m = addMarkers(m, lng=longs, lat=lats, popup=content)
+  }
+  # # mouse hovering to get content
+  # m = addMarkers(m, lng=longs, lat=lats, label=lapply(content, HTML))
+  m
 }
 
 ```
@@ -716,8 +727,8 @@ plot.watersheds = function(watersheds, map = TRUE, option) {
 # plot_shape(SHAPES[c(1061,1273,1368)], map=TRUE, "fraction")
 # plot_shape(SHAPES[c(1061,1273,1368)], map=FALSE, "fraction")
 
-plot.watersheds(watersheds=load.watersheds(c(1,1013,1409)), map=TRUE, option="gauge")
-plot.watersheds(watersheds=load.watersheds(c(1, 77, 101, 31)), map=TRUE, option="fraction")
+plot.watersheds(watersheds=load.watersheds(c(1,1013,1409)), option="gauge")
+plot.watersheds(watersheds=load.watersheds(c(1, 77, 101, 31)), option="info")
 
 ```
 

@@ -218,9 +218,49 @@ as.monthly = function(data) {
 
 
 
+```{r, echo=TRUE}
+# window: fixed time window average of raw ts, i.e. weekly ts, 20 day avg ts
+as.avg = function(data, window) {
+  mts = mts(data)
+  start_year = as.integer(tsp(mts[[1]])[1])
+  freq = as.integer(tsp(mts[[1]])[3])
+  n = length(mts[[1]])
+  k = ceiling(n / window)
+  
+  df = data.frame()
+  for (i in (1:length(mts))) {
+    avg = NULL
+    ts = mts[[i]]
+    for (i in (0:(k-1))) {
+      avg = c(avg, mean(ts[(i*window+1) : min(n,(i+1)*window)], na.rm=TRUE))
+    }
+    ts = ts(avg, start = c(start_year,1), frequency= freq / window)
+    if (dim(df)[1] == 0) {
+      df = data.frame(ts)
+    } # if current ts has same length as previous ones
+    else if (dim(df)[1] == length(ts)) {
+      df = cbind(df, ts)
+    } # if current ts differs in length from previous ones, then trim(longer)/pad(shorter)
+    else {
+      length(ts) = dim(df)[1]
+      df = cbind(df, ts)
+    }
+    
+  }
+  names(df) = names(mts)
+  
+  return (df)
+  
+}
 
 
+```
 
+
+```{r, echo=TRUE}
+as.avg(data1409, 7)
+
+```
 
 
 

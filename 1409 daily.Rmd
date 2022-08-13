@@ -98,7 +98,7 @@ Comment: the smaller the span on trend, the higher the degree, the better
 
 
 ```{r, echo=TRUE}
-convergence.test(ts1409, iter=5)
+convergence.test(ts1409, iter=7)
 
 ```
 
@@ -119,23 +119,53 @@ plot(stlp1409)
 
 ```
 
-
-
-
-
-# ma trend
-```{r, echo=TRUE}
-t = trend.ma(ts1409)
-s = seasonal.loess(ts1409 - t, deg=1, span = 1/38)
+```{r, echo=TRUE, warning=FALSE}
+# no cv
+start_time = Sys.time()
+obj1= decompose.loess(ts1409)
+end_time = Sys.time()
+end_time - start_time
 ```
 
 
 
-
-
+```{r, echo=TRUE, warning=FALSE}
+# cv on seasonal in iterations
+start_time = Sys.time()
+obj2= decompose.loess(ts1409)
+end_time = Sys.time()
+end_time - start_time
+```
 
 ```{r, echo=TRUE}
+plot(obj1$seasonal, xlim=c(1980,1982), col="red", main="seasonal")
+lines(obj2$seasonal, col="blue")
+legend("topright",legend=c("no cv","cv"), lty=1,
+       col=c("red", "blue"))
+
+plot(obj1$trend, ylim=c(-3,3), col="red",main="trend")
+lines(obj2$trend, col="blue")
+legend("topright",legend=c("no cv","cv"), lty=1,
+       col=c("red", "blue"))
+
+plot(obj1$short_trend, ylim=c(-3,3), col="red", main="short term trend")
+lines(obj2$short_trend, col="blue")
+legend("topright",legend=c("no cv","cv"), lty=1,
+       col=c("red", "blue"))
+
+plot(obj1$remainder, ylim=c(-3,3), col="red", main="remainder")
+lines(obj2$remainder, col="blue")
+legend("topright",legend=c("no cv","cv"), lty=1,
+       col=c("red", "blue"))
+```
+
+
+
+```{r, echo=TRUE, warning=FALSE}
+start_time = Sys.time()
 decomp1409 = decompose.loess(ts1409)
+end_time = Sys.time()
+end_time - start_time
 ```
 
 
@@ -144,23 +174,21 @@ decomp1409 = decompose.loess(ts1409)
 # trend compare
 plot(ts1409, type="l", col="green", ylim=c(-5,5), main="1409 trend compare")
 lines(decomp1409$trend, col="red")
-lines(t, col="orange")
 lines(ts(stlp1409$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
-legend("topright",legend=c("ts","loess","loess by MA", "stl_plus"), lty=1,
-       col=c("green","red","orange", "blue"))
+legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
+       col=c("green","red", "blue"))
 
 
 # seasonal compare
-plot(ts1409, type="l", col="green", xlim=c(1980,1982), ylim=c(-5,5), main="1409 seasonal compare")
+plot(ts1409, type="l", col="green", xlim=c(1980,1982), main="1409 seasonal compare")
 lines(decomp1409$seasonal, col="red")
-lines(s, col="orange")
 lines(ts(stlp1409$data[,"seasonal"], start =c(1980,1), frequency = 365), col="blue")
-legend("topright",legend=c("ts","loess","loess by MA", "stl_plus"), lty=1,
-       col=c("green","red","orange", "blue"))
+legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
+       col=c("green","red", "blue"))
 
 
 # remainder compare
-plot(ts1409, type="l", col="green", ylim=c(-5,5), main="1409 remainder compare")
+plot(ts1409, type="l", col="green", xlim=c(1980,1985), ylim=c(-5,5), main="1409 remainder compare")
 lines(decomp1409$remainder, col="red")
 lines(ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365), col="blue")
 legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
@@ -191,7 +219,7 @@ mean((ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365))^2, na.
 plot(ts1409, type="l", col="green", ylim=c(-5,5))
 lines(seasonal.loess(decomp1409$remainder, deg=1, span=15/sqrt(length(ts1409))), col="red")
 
-acf(decomp1409$remainder, lag.max = 365*3, main = "acf of daily response", na.action = na.pass)
+acf(decomp1409$remainder, lag.max = 50, main = "acf of daily response", na.action = na.pass)
 pacf(decomp1409$remainder, lag.max = 50, main = "pacf of daily respoonse", na.action = na.pass)
 
 
@@ -209,17 +237,20 @@ pacf(ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365), lag.max
 
 #short term trend
 ```{r, echo=TRUE}
-short_trend = trend.loess(decomp1409$remainder, deg=2, span=90/length(ts1409))
-error = decomp1409$remainder - short_trend
+# short_trend = trend.loess(decomp1409$remainder, deg=2, span=7/length(ts1409))
+# error = decomp1409$remainder - short_trend
+# 
+# plot(ts1409, xlim=c(1980,1982),type="l", col="green", ylim=c(-5,5))
+# lines(decomp1409$trend, col="red")
+# lines(short_trend, col="blue")
 
-plot(ts1409, type="l", col="green", ylim=c(-5,5))
+plot(ts1409, xlim=c(1980,1985), type="l", col="green", ylim=c(-5,5))
 lines(decomp1409$trend, col="red")
-lines(short_trend, col="blue")
+lines(decomp1409$short_trend, col="orange")
+lines(decomp1409$remainder, col="blue")
 
-
-
-acf(error, lag.max = 365,  na.action = na.pass)
-pacf(error, lag.max = 50,  na.action = na.pass)
+acf(decomp1409$remainder, lag.max = 50,  na.action = na.pass)
+pacf(decomp1409$remainder, lag.max = 50,  na.action = na.pass)
 
 
 
@@ -231,9 +262,9 @@ pacf(error, lag.max = 50,  na.action = na.pass)
 
 # model fitting
 ```{r, echo=TRUE}
-model = arima(ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365), order = c(5,0,0), include.mean = TRUE)
+model = arima(error, order = c(3,0,0), include.mean = TRUE)
 acf(model$residuals, na.action = na.pass)
-pacf(model$residuals, lag.max=365*5, na.action = na.pass)
+pacf(model$residuals, na.action = na.pass)
 tsdiag(model)
 plot(model$residuals, main="model residuals")
 qqnorm(model$residuals)
@@ -245,8 +276,10 @@ hist(model$residuals)
 
 
 
-
-
+<!-- ```{r, echo=TRUE} -->
+<!-- fivedaily_df = as.gasp.data(data1409, window=5) -->
+<!-- save(fivedaily_df, file="1409 5-day avg.RData") -->
+<!-- ``` -->
 
 
 

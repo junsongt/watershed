@@ -262,7 +262,21 @@ as.avg(data1409, 7)
 
 ```
 
+```{r, echo=TRUE}
+as.gasp.data = function(data, window) {
+  avg_mts = as.avg(data, window)
+  # number of years
+  k = length(data$yrs)
+  new_freq = as.integer(tsp(avg_mts$resp)[3])
+  index = seq(from=1, to=length(avg_mts$resp), by=1)
+  season = rep(c(1:new_freq), times = k)
+  year = rep(data$yrs, each=new_freq)
+  
+  df = data.frame(avg_mts, index, season, year)
+  return (df)
+}
 
+```
 
 
 #=======================================================================================
@@ -505,7 +519,7 @@ trend.ma = function(ts) {
 (2) LOESS method
 # Seasonal
 ```{r, echo=TRUE}
-seasonal.loess = function(ts, deg=2, span=0.75, iter=4) {
+seasonal.loess = function(ts, deg=2, window=length(ts), iter=4) {
   freq = as.integer(tsp(ts)[3])
   # number of cycles
   k = ceiling(length(ts)/freq)
@@ -521,31 +535,33 @@ seasonal.loess = function(ts, deg=2, span=0.75, iter=4) {
     cluster = cluster[!is.na(cluster)]
     x = c(x, rep(i, length(cluster)))
     y = c(y, cluster)
-    # set up marker such that it represents the pos that we should extract the fitted value 
+    # set up marker such that it represents the pos that we should extract the fitted value
     z = c(z, TRUE, rep(FALSE, length(cluster)-1))
-    
+
   }
   # df = data.frame(x, y)
-  
+  span = window / length(ts)
   loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control =loess.control(iterations=iter))
-  
+
   full_period = loess_obj$fitted[which(z==TRUE)]
   seasonality = rep(full_period, k)
-  
+
   return (ts(seasonality, start=c(start_year,1), frequency = freq))
 }
+
 
 ```
 
 
 # Trend
 ```{r, echo=TRUE}
-trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) {
+trend.loess = function(ts, deg=2, window=length(ts), iter=4, impute=FALSE) {
   freq = as.integer(tsp(ts)[3])
   start_year = as.integer(tsp(ts)[1])
   n = length(ts)
   y = ts
   x = c(1:n)
+  span = window / length(ts)
   loess_obj = loess(y ~ x, na.action=na.exclude, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
   na_index = which(is.na(ts))
   # if no NAs
@@ -573,119 +589,13 @@ trend.loess = function(ts, deg=2, span=0.75, iter=4, impute=FALSE) {
 
 
 
-(3) Convergence test(alternate season & trend extraction difference convergence test)
-$$X - s_1 = t_1 + \varepsilon_1$$
-$$X - t_1 = s_2 + \varepsilon_2$$
-$$X - s_2 = t_2 + \varepsilon_3$$
-$$\ldots$$
-$$X - s_{n-1} = t_{n-1} + \varepsilon_{2n-3}$$
-$$X - t_{n-1} = s_n + \varepsilon_{2n-2}$$
-$$X - S_n = t_n + \varepsilon_{2n-1}$$
-
-```{r, echo=TRUE}
-#iter should be odd
-convergence.test = function(ts, iter) {
-  ds = NULL
-  dt = NULL
-  freq = as.integer(tsp(ts)[3])
-  n = length(ts)
-  k = ceiling(n/freq)
-  prev_season = rep(0, length(ts))
-  prev_trend = rep(0, length(ts))
-  for (i in (1:iter)) {
-    if (i == 1) {
-      curr_season = seasonal.loess(ts, span=15/sqrt(n))
-      curr_trend = trend.loess(ts - curr_season, span=1.5/k)
-      ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
-      dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
-      prev_season = curr_season
-      prev_trend = curr_trend
-    }
-    else if (i %% 2 != 0) {
-      curr_trend = trend.loess(ts - prev_season, span=1.5/k)
-      dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
-      prev_trend = curr_trend
-    }
-    else {
-      curr_season = seasonal.loess(ts - prev_trend, span=15/sqrt(n))
-      ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
-      prev_season = curr_season
-    }
-  }
-  
-  return(data.frame(ds, dt))
-}
-
-```
 
 
 
 
 
 
-#relative error = sum(r_old^2) - sum(r_new^2)/ sum(r_new^2)
-
-#do while(sum(r_old^2) - sum(r_new^2) < 1 - relative error)
-
-$$\displaystyle r = \frac{|\sum_{i=1}^m \varepsilon_{n,i} - \sum_{i=1}^m \varepsilon_{n-1,i}|}{\sum_{i=1}^m \varepsilon_{n,i}}$$
-
-```{r, echo=TRUE}
-residual.test = function(ts, iter) {
-  relative_errors = NULL
-
-  prev_season = rep(0, length(ts))
-  prev_trend = rep(0, length(ts))
-  prev_error = rep(0, length(ts))
-  for (i in (1:iter)) {
-    if (i == 1) {
-      curr_season = seasonal.loess(ts, span=1/30)
-      curr_trend = trend.loess(ts - curr_season, span=1/38)
-      curr_error = ts - curr_season - curr_trend
-      
-      curr = sum(curr_error^2, na.rm = TRUE)
-      prev = sum(prev_error^2, na.rm = TRUE)
-      
-      relative_errors = c(relative_errors, abs(curr - prev)/curr)
-      
-      prev_season = curr_season
-      prev_trend = curr_trend
-      prev_error = curr_error
-      
-    }
-    else if (i %% 2 != 0) {
-      curr_trend = trend.loess(ts - prev_season, span=1/38)
-      curr_error = ts - curr_trend - prev_season
-      curr = sum(curr_error^2, na.rm = TRUE)
-      prev = sum(prev_error^2, na.rm = TRUE)
-      
-      relative_errors = c(relative_errors, abs(curr - prev)/curr)
-
-      prev_trend = curr_trend
-      prev_error = curr_error
-    }
-    else {
-      curr_season = seasonal.loess(ts - prev_trend, span=1/30)
-      curr_error = ts - curr_season - prev_trend
-      curr = sum(curr_error^2, na.rm = TRUE)
-      prev = sum(prev_error^2, na.rm = TRUE)
-      
-      relative_errors = c(relative_errors, abs(curr - prev)/curr)
-
-      prev_season = curr_season
-      prev_error = curr_error
-    }
-  }
-  
-  return(relative_errors)
-}
-
-```
-
-
-
-
-
-(4) Cross Validation
+(3) Cross Validation
 $$\text{total mean squrared error} = \frac1n \sum_{i=1}^{n} \varepsilon_{i}^2$$
 $$\text{In k-fold CV, }\sum_{j=1}^k n_j = n$$
 
@@ -694,47 +604,47 @@ $$\text{span.max} = \frac{k}{\sqrt{n}}$$
 # common suggestion of truncation point M = 2*sqrt(N);(M<N)
 #cv.seasonal
 ```{r, echo=TRUE}
-cv.seasonal = function(ts, d.max=2, span.min=NULL, span.max=NULL, span.control=NULL, fold=5) {
+cv.seasonal = function(ts, d.max=2, window.min=NULL, window.max=NULL, window.control=NULL, fold=5) {
   start_year = tsp(ts)[1]
   freq = as.integer(tsp(ts)[3])
   n = length(ts)
   k = ceiling(n/freq) # total number of cycles
   t = ceiling(k/fold) # number of cycles/fold
-  
+
   # total mean squared error
   minMSE = Inf
 
   best_degree = 0
-  best_span = span.min
-  
+  best_window = window.min
+
   n = length(ts)
   m = length(ts[!is.na(ts)])
-  if (is.null(span.min)) {
-    span.min = 10/sqrt(n)
+  if (is.null(window.min)) {
+    window.min = (10/sqrt(n)) * n
   }
-  
-  if (is.null(span.max)) {
-    span.max = 20/sqrt(n)
+
+  if (is.null(window.max)) {
+    window.max = (20/sqrt(n)) * n
   }
-  
-  if (is.null(span.control)) {
-    span.control = (span.max - span.min) / 10
+
+  if (is.null(window.control)) {
+    window.control = (window.max - window.min) / 10
   }
-  
+
   for (d in (1:d.max)) {
-    for (s in seq(from=span.min, to=span.max, by=span.control)) {
+    for (w in seq(from=window.min, to=window.max, by=window.control)) {
       # whole_pred = NULL
       # run 5 times CV
       SSE = 0
       for (i in (1:fold)) {
         test_index = seq(from=1+(i-1)*t*freq, to=min(i*t*freq, k*freq), by=1)
         test = ts[test_index]
-        
+
         train = ts[-test_index]
         train = ts(train, start=c(start_year, 1), frequency = freq)
-        seasonality = seasonal.loess(train, deg=d, span=s)
-        
-        
+        seasonality = seasonal.loess(train, deg=d, window=w)
+
+
         pred = seasonality[1:length(test_index)]
         # whole_pred[test_index] = pred
         SSE = SSE + sum((test - pred)^2, na.rm=TRUE)
@@ -742,20 +652,18 @@ cv.seasonal = function(ts, d.max=2, span.min=NULL, span.max=NULL, span.control=N
       }
       # MSE = mean((ts - whole_pred)^2, na.rm=TRUE)
       MSE = SSE / m
-      
-      
+
+
       if (MSE < minMSE) {
         best_degree = d
-        best_span = s
+        best_window = w
         minMSE = MSE
       }
     }
   }
-  
-  return (data.frame(best_degree, best_span, minMSE))
+
+  return (data.frame(best_degree, best_window, minMSE))
 }
-
-
 
 ```
 
@@ -837,6 +745,279 @@ cv.trend = function(ts, d.max = 2, span.min=NULL, span.max=NULL, span.control=NU
 ```
 
 
+```{r, echo=TRUE}
+ts.subset = function(ts, index) {
+  start_year = tsp(ts)[1]
+  freq = as.integer(tsp(ts)[3])
+  
+  start_idx = min(index)
+  end_idx = max(index)
+  
+  start_day = start_idx %% freq
+  year_passed = start_idx %/% freq #floor division
+  
+  subset = ts[start_idx : end_idx]
+  # if index is not continuous
+  if (length(subset) != length(index)) {
+    shifted_idx = index - start_idx + 1
+    subset[-shifted_idx] = NA
+  }
+
+  return (ts(subset, start=c(start_year+year_passed, start_day),  frequency=freq))
+}
+
+```
+
+
+
+
+```{r, echo=TRUE}
+cv.st = function(ts, d.max = 2, window.min=NULL, window.max=NULL, window.control=NULL) {
+  n = length(ts)
+  m = length(ts[!is.na(ts)])
+  
+  
+  # total mean squared error 
+  minMSE = Inf
+
+  if (is.null(window.min)) {
+    window.min = 7
+  }
+  
+  if (is.null(window.max)) {
+    window.max = 31
+  }
+  
+  if (is.null(window.control)) {
+    window.control = 6
+  }
+  
+  
+  best_degree = 0
+  best_window = window.min
+  
+  
+  for (d in (1:d.max)) {
+    for (w in seq(from=window.min, to=window.max, by=window.control)) {
+      # run n times CV
+      SSE = 0
+      
+      if (w %% 2 == 0) {
+        w = w + 1
+      }
+      
+      for (i in (1:n)) {
+        test = ts[i]
+
+        r = (w - 1) / 2
+        
+        if (i <= r) {
+          interval = c(1 : w)
+          center = i
+        }
+        else if (i > n - r) {
+          interval = c((n-w+1) : n)
+          center = i - (n-w)
+        }
+        else {
+          interval = c((i-r) : (i+r))
+          center = 1 + r
+        }
+        neighbourhood = ts.subset(ts, interval)
+        neighbourhood[center] = NA
+        
+        local_trend = trend.loess(neighbourhood, deg=d, span=1, impute=TRUE)
+        pred = local_trend[center]
+        SSE = SSE + sum((test - pred)^2, na.rm=TRUE)
+        
+      }
+    
+      MSE = SSE / m
+      
+      if (MSE < minMSE) {
+        best_degree = d
+        best_window = w
+        minMSE = MSE
+      }
+    }
+  }
+  
+  return (data.frame(best_degree, best_window, minMSE))
+}
+
+```
+
+
+```{r, echo=TRUE}
+cv.st(window(decomp1409$remainder, start=c(1980,1), end=c(1996,365)))
+
+
+```
+
+
+
+(4) Convergence test(alternate season & trend extraction difference convergence test)
+$$X - s_1 = t_1 + \varepsilon_1$$
+$$X - t_1 = s_2 + \varepsilon_2$$
+$$X - s_2 = t_2 + \varepsilon_3$$
+$$\ldots$$
+$$X - s_{n-1} = t_{n-1} + \varepsilon_{2n-3}$$
+$$X - t_{n-1} = s_n + \varepsilon_{2n-2}$$
+$$X - S_n = t_n + \varepsilon_{2n-1}$$
+
+```{r, echo=TRUE}
+# #iter should be odd
+# convergence.test = function(ts, iter) {
+#   ds = NULL
+#   dt = NULL
+#   freq = as.integer(tsp(ts)[3])
+#   n = length(ts)
+#   k = ceiling(n/freq)
+#   true_iter = 2 * iter - 1
+#   prev_season = rep(0, length(ts))
+#   prev_trend = rep(0, length(ts))
+#   for (i in (1:true_iter)) {
+#     if (i == 1) {
+#       curr_season = seasonal.loess(ts, span=15/sqrt(n))
+#       curr_trend = trend.loess(ts - curr_season, span=1.5/k)
+#       ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
+#       dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
+#       prev_season = curr_season
+#       prev_trend = curr_trend
+#     }
+#     else if (i %% 2 != 0) {
+#       curr_trend = trend.loess(ts - prev_season, span=1.5/k)
+#       dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
+#       prev_trend = curr_trend
+#     }
+#     else {
+#       curr_season = seasonal.loess(ts - prev_trend, span=15/sqrt(n))
+#       ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
+#       prev_season = curr_season
+#     }
+#   }
+# 
+#   return(data.frame(ds, dt))
+# }
+
+
+convergence.test = function(ts, iter) {
+  ds = NULL
+  dt = NULL
+  dst = NULL
+  freq = as.integer(tsp(ts)[3])
+  n = length(ts)
+  k = ceiling(n/freq)
+  
+  true_iter = 3 * iter - 2
+  
+  s_span = 15 / sqrt(n)
+  s_window = s_span * n
+  t_window = (1.5 * freq) / (1 - (1.5/s_window))
+  
+  
+  st_window = 7
+  
+  prev_season = rep(0, length(ts))
+  prev_trend = rep(0, length(ts))
+  prev_st = rep(0, length(ts))
+  for (i in (1:true_iter)) {
+    if (i == 1) {
+      curr_trend = trend.loess(ts, deg=1, window=t_window)
+      curr_season = seasonal.loess(ts - curr_trend, deg=1, window=s_window)
+      curr_st = trend.loess(ts - curr_trend - curr_season, deg=2, window=st_window)
+      ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
+      dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
+      dst = c(dst, mean((curr_st - prev_st)^2, na.rm=TRUE))
+      prev_trend = curr_trend
+      prev_season = curr_season
+      prev_st = curr_st
+    }
+    else if (i %% 3 == 2) {
+      curr_trend = trend.loess(ts - prev_season - prev_st, deg=1, window=t_window)
+      dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
+      prev_trend = curr_trend
+    }
+    else if (i %% 3 == 0) {
+      curr_season = seasonal.loess(ts - prev_trend - prev_st, deg=1, window=s_window)
+      ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
+      prev_season = curr_season
+    }
+    else {
+      curr_st = trend.loess(ts - prev_trend - prev_season, deg=2, window=st_window)
+      dst = c(dst, mean((curr_st - prev_st)^2, na.rm=TRUE))
+      prev_st = curr_st
+    }
+  }
+  
+  return(data.frame(ds, dt, dst))
+}
+
+```
+
+
+
+
+
+
+<!-- #relative error = sum(r_old^2) - sum(r_new^2)/ sum(r_new^2) -->
+
+<!-- #do while(sum(r_old^2) - sum(r_new^2) < 1 - relative error) -->
+
+<!-- $$\displaystyle r = \frac{|\sum_{i=1}^m \varepsilon_{n,i} - \sum_{i=1}^m \varepsilon_{n-1,i}|}{\sum_{i=1}^m \varepsilon_{n,i}}$$ -->
+
+<!-- ```{r, echo=TRUE} -->
+<!-- residual.test = function(ts, iter) { -->
+<!--   relative_errors = NULL -->
+
+<!--   prev_season = rep(0, length(ts)) -->
+<!--   prev_trend = rep(0, length(ts)) -->
+<!--   prev_error = rep(0, length(ts)) -->
+<!--   for (i in (1:iter)) { -->
+<!--     if (i == 1) { -->
+<!--       curr_season = seasonal.loess(ts, span=1/30) -->
+<!--       curr_trend = trend.loess(ts - curr_season, span=1/38) -->
+<!--       curr_error = ts - curr_season - curr_trend -->
+
+<!--       curr = sum(curr_error^2, na.rm = TRUE) -->
+<!--       prev = sum(prev_error^2, na.rm = TRUE) -->
+
+<!--       relative_errors = c(relative_errors, abs(curr - prev)/curr) -->
+
+<!--       prev_season = curr_season -->
+<!--       prev_trend = curr_trend -->
+<!--       prev_error = curr_error -->
+
+<!--     } -->
+<!--     else if (i %% 2 != 0) { -->
+<!--       curr_trend = trend.loess(ts - prev_season, span=1/38) -->
+<!--       curr_error = ts - curr_trend - prev_season -->
+<!--       curr = sum(curr_error^2, na.rm = TRUE) -->
+<!--       prev = sum(prev_error^2, na.rm = TRUE) -->
+
+<!--       relative_errors = c(relative_errors, abs(curr - prev)/curr) -->
+
+<!--       prev_trend = curr_trend -->
+<!--       prev_error = curr_error -->
+<!--     } -->
+<!--     else { -->
+<!--       curr_season = seasonal.loess(ts - prev_trend, span=1/30) -->
+<!--       curr_error = ts - curr_season - prev_trend -->
+<!--       curr = sum(curr_error^2, na.rm = TRUE) -->
+<!--       prev = sum(prev_error^2, na.rm = TRUE) -->
+
+<!--       relative_errors = c(relative_errors, abs(curr - prev)/curr) -->
+
+<!--       prev_season = curr_season -->
+<!--       prev_error = curr_error -->
+<!--     } -->
+<!--   } -->
+
+<!--   return(relative_errors) -->
+<!-- } -->
+
+<!-- ``` -->
+
 
 ```{r, echo=TRUE}
 ## de-seasonalized first
@@ -852,24 +1033,22 @@ cv.trend = function(ts, d.max = 2, span.min=NULL, span.max=NULL, span.control=NU
 #     t.window = (1.5 * freq) /(1 - 1.5/s.window)
 #   }
 #   
-#   s_span = s.window / n
-#   t_span = t.window / n
 #   
 #   prev_season = rep(0, length(ts))
 #   prev_trend = rep(0, length(ts))
 #   for (i in (1:true_iter)) {
 #     if (i == 1) {
-#       curr_season = seasonal.loess(ts, deg=s.deg, span=s_span)
-#       curr_trend = trend.loess(ts - curr_season, deg=t.deg, span=t_span)
+#       curr_season = seasonal.loess(ts, deg=s.deg, window=s.window)
+#       curr_trend = trend.loess(ts - curr_season, deg=t.deg, window=t.window)
 #       prev_season = curr_season
 #       prev_trend = curr_trend
 #     }
 #     else if (i %% 2 != 0) {
-#       curr_trend = trend.loess(ts - prev_season, deg=t.deg, span=t_span)
+#       curr_trend = trend.loess(ts - prev_season, deg=t.deg, window=t.window)
 #       prev_trend = curr_trend
 #     }
 #     else {
-#       curr_season = seasonal.loess(ts - prev_trend, deg=s.deg, span=s_span)
+#       curr_season = seasonal.loess(ts - prev_trend, deg=s.deg, window=s.window)
 #       prev_season = curr_season
 #     }
 #   }
@@ -878,43 +1057,167 @@ cv.trend = function(ts, d.max = 2, span.min=NULL, span.max=NULL, span.control=NU
 #   return (data.frame(raw=ts, seasonal=curr_season, trend=curr_trend, remainder=remainder))
 # }
 
-# de-trend first
-decompose.loess = function(ts, s.deg=1, t.deg=1, s.window=NULL, t.window=NULL, iter=3) {
+# # de-trend first
+# decompose.loess = function(ts, s.deg=1, t.deg=1, s.window=NULL, t.window=NULL, iter=3) {
+#   freq = as.integer(tsp(ts)[3])
+#   n = length(ts)
+#   true_iter = 2 * iter - 1
+#   
+#   if (is.null(s.window)) {
+#     s.window = n * (15 / sqrt(n))
+#   }
+#   if (is.null(t.window)) {
+#     t.window = (1.5 * freq) /(1 - 1.5/s.window)
+#   }
+#   
+#   
+#   prev_season = rep(0, length(ts))
+#   prev_trend = rep(0, length(ts))
+#   for (i in (1:true_iter)) {
+#     if (i == 1) {
+#       curr_trend = trend.loess(ts, deg=t.deg, window=t.window)
+#       curr_season = seasonal.loess(ts - curr_trend, deg=s.deg, window=s.window)
+#       prev_trend = curr_trend
+#       prev_season = curr_season
+#     }
+#     else if (i %% 2 == 0) {
+#       curr_trend = trend.loess(ts - prev_season, deg=t.deg, window=t.window)
+#       prev_trend = curr_trend
+#     }
+#     else {
+#       curr_season = seasonal.loess(ts - prev_trend, deg=s.deg, window=s.window)
+#       prev_season = curr_season
+#     }
+#   }
+#   
+#   remainder = ts - curr_season - curr_trend
+#   return (data.frame(raw=ts, seasonal=curr_season, trend=curr_trend, remainder=remainder))
+# }
+
+
+
+# decompose.loess = function(ts, s.deg=1, t.deg=1, st.deg=2, s.window=NULL, t.window=NULL, st.window=NULL, iter=3) {
+#   freq = as.integer(tsp(ts)[3])
+#   n = length(ts)
+#   true_iter = 3 * iter - 2
+# 
+#   if (is.null(s.window)) {
+#     s.window = n * (15 / sqrt(n))
+#   }
+#   if (is.null(t.window)) {
+#     t.window = (1.5 * freq) /(1 - 1.5/s.window)
+#   }
+# 
+#   if (is.null(st.window)) {
+#     st.window = 7
+#   }
+# 
+# 
+#   prev_season = rep(0, length(ts))
+#   prev_trend = rep(0, length(ts))
+#   prev_st = rep(0, length(ts))
+#   for (i in (1:true_iter)) {
+#     if (i == 1) {
+#       curr_trend = trend.loess(ts, deg=t.deg, window=t.window)
+#       curr_season = seasonal.loess(ts - curr_trend, deg=s.deg, window=s.window)
+#       curr_st = trend.loess(ts - curr_trend - curr_season, deg=st.deg, window=st.window)
+#       prev_trend = curr_trend
+#       prev_season = curr_season
+#       prev_st = curr_st
+#     }
+#     else if (i %% 3 == 2) {
+#       curr_trend = trend.loess(ts - prev_season - prev_st, deg=t.deg, window=t.window)
+#       prev_trend = curr_trend
+#     }
+#     else if (i %% 3 == 0) {
+#       curr_season = seasonal.loess(ts - prev_trend - prev_st, deg=s.deg, window=s.window)
+#       prev_season = curr_season
+#     }
+#     else {
+#       curr_st = trend.loess(ts - prev_trend - prev_season, deg=st.deg, window=st.window)
+#       prev_st = curr_st
+#     }
+#   }
+# 
+#   remainder = ts - curr_season - curr_trend - curr_st
+#   return (data.frame(raw=ts, seasonal=curr_season, trend=curr_trend, short_trend=curr_st, remainder=remainder))
+# }
+
+
+# s.window is a vector specifying the window range, i.e. s.window = c(100, 200)
+# if lb = ub, then no cv search will be done, otherwise, do cv search on seasonal span
+decompose.loess = function(ts, s.deg=1, t.deg=1, st.deg=2, s.window=NULL, t.window=NULL, st.window=NULL, iter=3, cv.control = list(increment=NULL, fold=5)) {
   freq = as.integer(tsp(ts)[3])
   n = length(ts)
-  true_iter = 2 * iter - 1
-  
-  if (is.null(s.window)) {
-    s.window = n * (15 / sqrt(n))
+  true_iter = 3 * iter - 2
+
+
+  if (is.null(st.window)) {
+    st.window = 7
   }
+
   if (is.null(t.window)) {
-    t.window = (1.5 * freq) /(1 - 1.5/s.window)
+    t.window = 1.5 * freq
   }
-  
-  s_span = s.window / n
-  t_span = t.window / n
-  
+
+
+  if (is.null(s.window)) {
+    s.window = n * c(10/sqrt(n), 20/sqrt(n))
+  }
+
+  if (is.null(cv.control$increment)) {
+    cv.control$increment = (max(s.window) - min(s.window)) / 10
+  }
+  opt_deg = s.deg
+  opt_window = n * (15 / sqrt(n))
+
+
   prev_season = rep(0, length(ts))
   prev_trend = rep(0, length(ts))
+  prev_st = rep(0, length(ts))
+
   for (i in (1:true_iter)) {
     if (i == 1) {
-      curr_trend = trend.loess(ts, deg=t.deg, span=t_span)
-      curr_season = seasonal.loess(ts - curr_trend, deg=s.deg, span=s_span)
+      curr_trend = trend.loess(ts, deg=t.deg, window=t.window)
+
+      opt_para = cv.seasonal(ts - curr_trend,
+                             window.min=min(s.window),
+                             window.max=max(s.window),
+                             window.control=cv.control$increment,
+                             fold=cv.control$fold)
+
+      opt_deg = opt_para$best_deg
+      opt_window = opt_para$best_window
+      curr_season = seasonal.loess(ts - curr_trend, deg=opt_deg, window=opt_window)
+      curr_st = trend.loess(ts - curr_trend - curr_season, deg=st.deg, window=st.window)
       prev_trend = curr_trend
       prev_season = curr_season
+      prev_st = curr_st
     }
-    else if (i %% 2 == 0) {
-      curr_trend = trend.loess(ts - prev_season, deg=t.deg, span=t_span)
+    else if (i %% 3 == 2) {
+      t.window = (1.5 * freq) / (1 - 1.5/opt_window)
+      curr_trend = trend.loess(ts - prev_season - prev_st, deg=t.deg, window=t.window)
       prev_trend = curr_trend
+    }
+    else if (i %% 3 == 0) {
+      opt_para = cv.seasonal(ts - prev_trend - prev_st,
+                             window.min=min(s.window),
+                             window.max=max(s.window),
+                             window.control=cv.control$increment,
+                             fold=cv.control$fold)
+      opt_deg = opt_para$best_deg
+      opt_window = opt_para$best_window
+      curr_season = seasonal.loess(ts - prev_trend - prev_st, deg=opt_deg, window=opt_window)
+      prev_season = curr_season
     }
     else {
-      curr_season = seasonal.loess(ts - prev_trend, deg=s.deg, span=s_span)
-      prev_season = curr_season
+      curr_st = trend.loess(ts - prev_trend - prev_season, deg=st.deg, window=st.window)
+      prev_st = curr_st
     }
   }
-  
-  remainder = ts - curr_season - curr_trend
-  return (data.frame(raw=ts, seasonal=curr_season, trend=curr_trend, remainder=remainder))
+
+  remainder = ts - curr_season - curr_trend - curr_st
+  return (data.frame(raw=ts, seasonal=curr_season, trend=curr_trend, short_trend=curr_st, remainder=remainder))
 }
 
 ```
@@ -923,65 +1226,35 @@ decompose.loess = function(ts, s.deg=1, t.deg=1, s.window=NULL, t.window=NULL, i
 
 ```{R, echo=TRUE}
 
-R1 = NULL
-R2 = NULL
-for (x in valid_gridcode) {
-  df = as.daily(DATA[[x]])
-  if (length(df$resp) >= 30*365) {
-    start_year = df$years[1]
-    if (0 %in% df$resp) {
-      ts = ts(df$resp, start=c(start_year,1), frequency = 365)
-    } else {
-      ts = ts(log(df$resp), start=c(start_year,1), frequency = 365)
-    }
-    stlp = stlplus(ts, n.p=365, s.window="periodic", inner=2, outer=10)
-    decomp = decompose.loess(ts)
-    R1 = c(R1, mean((decomp$remainder)^2, na.rm = TRUE)) 
-    R2 = c(R2, mean((ts(stlp$data[,"remainder"], start =c(start_year,1), frequency = 365))^2, na.rm=TRUE))
-  }
-  
-}
-
-plot(x=valid_gridcode, y=R1, type="p", col="red")
-points(x=valid_gridcode,y=R2, col="blue")
-
-```
-
-
-
-
-
-```{r, echo=TRUE}
-subseasonal.loess = function(ts, freq, deg=2, span=0.75, iter=4) {
-  k = floor(tsp(ts)[2]-tsp(ts)[1])+1
-  main_freq = as.integer(tsp(ts)[3])
-  start_year = as.integer(tsp(ts)[1])
-  # form data frame arranged in same day order
-  x = NULL
-  y = NULL
-  z = NULL
-  for (i in (1:freq)) {
-    indices = seq(from=i, to=i+(k-1)*freq, by=freq)
-    cluster = ts[indices]
-    # clear out NA
-    cluster = cluster[!is.na(cluster)]
-    x = c(x, rep(i, length(cluster)))
-    y = c(y, cluster)
-    # set up marker such that it represents the pos that we should extract the fitted value 
-    z = c(z, TRUE, rep(FALSE, length(cluster)-1))
-    
-  }
-  # df = data.frame(x, y)
-  
-  loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control =loess.control(iterations=iter))
-  
-  full_period = loess_obj$fitted[which(z==TRUE)]
-  seasonality = rep(full_period, k)
-  
-  return (ts(seasonality, start=c(start_year,1), frequency = main_freq))
-}
+# R1 = NULL
+# R2 = NULL
+# for (x in valid_gridcode) {
+#   df = as.daily(DATA[[x]])
+#   if (length(df$resp) >= 30*365) {
+#     start_year = df$years[1]
+#     if (0 %in% df$resp) {
+#       ts = ts(df$resp, start=c(start_year,1), frequency = 365)
+#     } else {
+#       ts = ts(log(df$resp), start=c(start_year,1), frequency = 365)
+#     }
+#     stlp = stlplus(ts, n.p=365, s.window="periodic", inner=2, outer=10)
+#     decomp = decompose.loess(ts)
+#     R1 = c(R1, mean((decomp$remainder)^2, na.rm = TRUE)) 
+#     R2 = c(R2, mean((ts(stlp$data[,"remainder"], start =c(start_year,1), frequency = 365))^2, na.rm=TRUE))
+#   }
+#   
+# }
+# 
+# plot(x=valid_gridcode, y=R1, type="p", col="red")
+# points(x=valid_gridcode,y=R2, col="blue")
 
 ```
+
+
+
+
+
+
 
 
 

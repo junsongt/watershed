@@ -471,7 +471,7 @@ cv.seasonal = function(ts, d.max=2, window.min=NULL, window.max=NULL, window.con
   freq = as.integer(tsp(ts)[3])
   n = length(ts)
   k = ceiling(n/freq) # total number of cycles
-  t = ceiling(k/fold) # number of cycles/fold
+  t = round(k/fold) # number of cycles/fold
 
   # total mean squared error
   minMSE = Inf
@@ -959,7 +959,7 @@ decompose.loess.plus = function(ts, s.deg=1, t.deg=1, st.deg=2, s.window=NULL, t
   remainder = ts - curr_season - curr_trend - curr_st
   return (list(component = data.frame(raw=ts, seasonal=curr_season, trend=curr_trend, short_trend=curr_st, remainder=remainder),
                seasonal.degree = opt_deg,
-               seasonal.window = opt_window,
+               seasonal.window = opt_window / k,
                trend.degree = t.deg,
                trend.window = t.window,
                short.term.trend.degree = st.deg,

@@ -58,7 +58,7 @@ plot(stlp1458)
 
 # seasonality
 ```{r, echo=TRUE}
-decomp1458 = decompose.loess(ts1458)
+decomp1458 = decompose.loess.plus(ts1458)
 ```
 
 
@@ -66,21 +66,21 @@ decomp1458 = decompose.loess(ts1458)
 ```{r, echo=TRUE}
 # trend compare
 plot(ts1458, type="l", col="green", ylim=c(-5,5), main="1458 trend compare")
-lines(decomp1458$trend, col="red")
+lines(decomp1458$component$trend, col="red")
 lines(ts(stlp1458$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
 legend("topright",legend=c("ts","loess", "stl_plus"), lty=1, col=c("green","red", "blue"))
 
 
 # seasonal compare
 plot(ts1458, type="l", col="green", xlim=c(1980,1982), ylim=c(-5,5), main="1458 seasonal compare")
-lines(decomp1458$seasonal, col="red")
+lines(decomp1458$component$seasonal, col="red")
 lines(ts(stlp1458$data[,"seasonal"], start =c(1980,1), frequency = 365), col="blue")
 legend("topright",legend=c("ts","loess", "stl_plus"), lty=1, col=c("green","red", "blue"))
 
 
 # remainder compare
 plot(ts1458, type="l", col="green", ylim=c(-5,5), main="1458 remainder compare")
-lines(decomp1458$remainder, col="red")
+lines(decomp1458$component$remainder, col="red")
 lines(ts(stlp1458$data[,"remainder"], start =c(1980,1), frequency = 365), col="blue")
 legend("topright",legend=c("ts","loess", "stl_plus"), lty=1, col=c("green","red", "blue"))
 
@@ -90,30 +90,49 @@ legend("topright",legend=c("ts","loess", "stl_plus"), lty=1, col=c("green","red"
 
 
 ```{r, echo=TRUE}
-mean((ts1458 - decomp1458$trend)^2, na.rm=TRUE)
-mean((ts1458 - ts(stlp1458$data[,"trend"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
+# mean((ts1458 - decomp1458$component$trend)^2, na.rm=TRUE)
+# mean((ts1458 - ts(stlp1458$data[,"trend"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
+# 
+# mean((ts1458 - decomp1458$component$seasonal)^2, na.rm=TRUE)
+# mean((ts1458 - ts(stlp1458$data[,"seasonal"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
 
-mean((ts1458 - decomp1458$seasonal)^2, na.rm=TRUE)
-mean((ts1458 - ts(stlp1458$data[,"seasonal"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
 
-
-mean((decomp1458$remainder)^2, na.rm = TRUE)
+mean((decomp1458$component$remainder)^2, na.rm = TRUE)
 mean((ts(stlp1458$data[,"remainder"], start =c(1980,1), frequency = 365))^2, na.rm=TRUE)
 
 ```
 
+
+#=========================================================================================Model
+
+
+```{r, echo=TRUE}
+# check if the remainder has any seasonal leftover
+plot(ts1458, type="l", col="green", ylim=c(-5,5))
+lines(seasonal.loess(decomp1458$component$remainder, deg=1, window=decomp1458$seasonal.window), col="red")
+
+acf(decomp1458$component$remainder, lag.max = 50, main = "acf of daily response", na.action = na.pass)
+pacf(decomp1458$component$remainder, lag.max = 50, main = "pacf of daily respoonse", na.action = na.pass)
+
+acf(ts(stlp1458$data[,"remainder"], start =c(1980,1), frequency = 365), lag.max = 365,  na.action = na.pass)
+pacf(ts(stlp1458$data[,"remainder"], start =c(1980,1), frequency = 365), lag.max = 50,  na.action = na.pass)
+
+```
 
 
 
 
 # model fitting
 ```{r, echo=TRUE}
-model = arima(error, order = c(5,0,0), include.mean = TRUE)
-acf(model$residuals)
-pacf(model$residuals, lag.max = 365)
+model = arima(decomp1458$component$remainder, order = c(2,0,3), include.mean = TRUE)
+acf(model$residuals, na.action = na.pass)
+pacf(model$residuals, lag.max = 365, na.action = na.pass)
 tsdiag(model)
 qqnorm(model$residuals)
 qqline(model$residuals)
 hist(model$residuals)
 
 ```
+
+
+

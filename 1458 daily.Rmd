@@ -16,8 +16,6 @@ library(forecast)
 library(stlplus)
 library(seasonal)
 library(L1pack)
-
-
 ```
 
 

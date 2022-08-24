@@ -444,10 +444,10 @@ seasonal = function(ts, deg=2, window=length(ts), iter=4) {
   x = NULL
   y = NULL
   z = NULL
-  # bumper is number of traceback days from head or traceforward days from tail
-  bumper = ceiling(window / k)
+  # buffer is number of traceback days from head or traceforward days from tail
+  buffer = ceiling(window / k)
   
-  for (i in ((1-bumper):(freq+bumper))) {
+  for (i in ((1-buffer):(freq+buffer))) {
     if (i < 1) {
       indices = seq(from=i+freq, to=i+k*freq, by=freq)
     }
@@ -478,7 +478,7 @@ seasonal = function(ts, deg=2, window=length(ts), iter=4) {
 
   loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control =loess.control(iterations=iter))
 
-  full_period = loess_obj$fitted[which(z==TRUE)][c((bumper+1) : (bumper+freq))]
+  full_period = loess_obj$fitted[which(z==TRUE)][c((buffer+1) : (buffer+freq))]
   seasonality = rep(full_period, k)
 
   return (ts(seasonality, start=c(start_year,1), frequency = freq))

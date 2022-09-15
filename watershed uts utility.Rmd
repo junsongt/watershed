@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(knitr)
 library(tidyverse)
-library(tseries)
+# library(tseries)
 ```
 
 
@@ -480,6 +480,7 @@ seasonal = function(ts, deg=2, window=length(ts), iter=4) {
 
   full_period = loess_obj$fitted[which(z==TRUE)][c((buffer+1) : (buffer+freq))]
   seasonality = rep(full_period, k)
+  seasonality = seasonality[c(1:length(ts))]
 
   return (ts(seasonality, start=c(start_year,1), frequency = freq))
 }
@@ -487,14 +488,49 @@ seasonal = function(ts, deg=2, window=length(ts), iter=4) {
 ```
 
 
-```{r, echo=TRUE}
-start_time = Sys.time()
-s = seasonal(ts1409, deg = 2, window = 38*30)
-end_time = Sys.time()
-end_time - start_time
 
-```
 
+
+<!-- # trend(MA over one full period) -->
+<!-- ```{r, echo=TRUE} -->
+<!-- ma.smooth = function(x, lag) { -->
+<!--   n = length(x) -->
+<!--   result = NULL -->
+<!--   for (i in (1:(n-lag))) { -->
+<!--     avg = mean(x[i:(i+lag)], na.rm = TRUE) -->
+<!--     result = c(result, avg) -->
+<!--   } -->
+<!--   return (result) -->
+<!-- } -->
+
+
+<!-- trend.ma = function(ts) { -->
+<!--   freq = as.integer(tsp(ts)[3]) -->
+<!--   n = length(ts) -->
+<!--   start_year = as.integer(tsp(ts)[1]) -->
+
+<!--   trend = NULL -->
+<!--   final_trend = rep(NA, n) -->
+<!--   # freq=5, w=2, freq=4, w=1.5 -->
+<!--   window  = (freq-1) / 2 -->
+<!--   # if freq = odd -->
+<!--   if (freq %% 2 != 0) { -->
+<!--     trend = ma.smooth(ts, lag=2*window) -->
+<!--     # padding head & tail -->
+<!--     final_trend[(window+1):(n-window)] = trend -->
+<!--   } -->
+<!--   else { -->
+<!--     temp = ma.smooth(ts, lag=2*window) -->
+<!--     trend = ma.smooth(temp, lag = 1) -->
+<!--     # padding head & tail -->
+<!--     w = window + 0.5 -->
+<!--     final_trend[(w+1):(n-w)] = trend -->
+<!--   } -->
+
+<!--   return (ts(final_trend, start=c(start_year, 1), frequency = freq)) -->
+
+<!-- } -->
+<!-- ``` -->
 
 
 # Trend
@@ -516,17 +552,122 @@ trend = function(ts, deg=2, window=length(ts), iter=4, impute=FALSE) {
   else {
     y[-na_index] = loess_obj$fitted
   }
-  
+
   if (impute) {
     y[na_index] = as.numeric(predict(object=loess_obj, newdata=data.frame(x=na_index)))
   }
   else {
     y[na_index] = NA
   }
-  
+
   return (ts(y, start = c(start_year,1), frequency = freq))
-  
 }
+
+
+
+# trend = function(ts, deg=2, window=length(ts), iter=4, impute=FALSE) {
+#   freq = as.integer(tsp(ts)[3])
+#   start_year = as.integer(tsp(ts)[1])
+#   n = length(ts)
+#   if (freq %% 2 != 0) {
+#     y = stats::filter(ts, rep(1,freq), method=c("convolution"), sides=2, circular=FALSE) / freq
+#   } else {
+#     y = stats::filter(ts, c(0.5, rep(1,freq-1), 0.5), method=c("convolution"), sides=2, circular=FALSE) / freq
+#   }
+# 
+#   x = c(1:n)
+#   span = window / length(ts)
+#   loess_obj = loess(y ~ x, na.action=na.exclude, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
+# 
+#   na_index = which(is.na(ts))
+#   to_be_pad = setdiff(which(is.na(y)), which(is.na(ts)))
+#   y[to_be_pad] = as.numeric(predict(object=loess_obj, newdata=data.frame(x=to_be_pad)))
+#   # if no NAs
+#   if (length(na_index) == 0) {
+#     y[-to_be_pad] = loess_obj$fitted
+#   }
+#   # if there are NAs
+#   else {
+#     y[-c(na_index, to_be_pad)] = loess_obj$fitted
+#   }
+# 
+#   if (impute) {
+#     y[na_index] = as.numeric(predict(object=loess_obj, newdata=data.frame(x=na_index)))
+#   }
+#   else {
+#     y[na_index] = NA
+#   }
+# 
+#   return (ts(y, start = c(start_year,1), frequency = freq))
+# }
+
+
+
+# trend = function(ts, deg=2, window=length(ts), iter=4, impute=FALSE) {
+#   freq = as.integer(tsp(ts)[3])
+#   start_year = as.integer(tsp(ts)[1])
+#   n = length(ts)
+#   i = 1
+#   na_index = NULL
+#   y = NULL
+#   while (i <= n) {
+#     if (!is.na(ts[i])) {
+#       accumulator = i
+#       x = NULL
+#       while (!is.na(ts[accumulator])) {
+#         x = c(x, accumulator)
+#         accumulator = accumulator + 1
+#       }
+#       cts_sub = ts.subset(ts, x)
+#       if (length(cts_sub) >= freq) {
+#         if (freq %% 2 != 0) {
+#           t_ma = stats::filter(cts_sub, rep(1,freq), method=c("convolution"), sides=2, circular=FALSE) / freq
+#         } else {
+#           t_ma = stats::filter(cts_sub, c(0.5, rep(1,freq-1), 0.5), method=c("convolution"), sides=2, circular=FALSE) / freq
+#         }
+# 
+#         span = window / length(t_ma)
+#         x = c(1:length(t_ma))
+#         loess_obj = loess(t_ma ~ x, na.action=na.exclude, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
+#         index = which(is.na(t_ma))
+#         t_ma[-index] = loess_obj$fitted
+#         t_ma[index] = as.numeric(predict(object=loess_obj, newdata=data.frame(x=index)))
+# 
+# 
+#         y = c(y, t_ma)
+#       } else {
+#         y = c(y, rep(NA, length(cts_sub)))
+#       }
+#       i = accumulator
+#     }
+#     else {
+#       na_index = c(na_index, i)
+#       y = c(y, NA)
+#       i = i + 1
+#     }
+#   }
+# 
+#   # span = window / length(ts)
+#   # x = c(1:n)
+#   # loess_obj = loess(y ~ x, na.action=na.exclude, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
+#   # # if no NAs
+#   # if (length(na_index) == 0) {
+#   #   y = loess_obj$fitted
+#   # }
+#   # # if there are NAs
+#   # else {
+#   #   y[-na_index] = loess_obj$fitted
+#   # }
+#   #
+#   # if (impute) {
+#   #   y[na_index] = as.numeric(predict(object=loess_obj, newdata=data.frame(x=na_index)))
+#   # }
+# 
+#   return (list(trend = ts(y, start = c(start_year,1), frequency = freq),
+#                loess = loess_obj))
+# }
+
+
 
 ```
 
@@ -571,7 +712,8 @@ cv.seasonal = function(ts, d.max=2, window.min=NULL, window.max=NULL, window.con
   }
 
   if (is.null(window.control)) {
-    window.control = (window.max - window.min) / 10
+    # window.min + increment * (steps - 1) = window.max
+    window.control = (window.max - window.min) / (10 - 1)
   }
 
   for (d in (1:d.max)) {
@@ -579,13 +721,16 @@ cv.seasonal = function(ts, d.max=2, window.min=NULL, window.max=NULL, window.con
       # whole_pred = NULL
       # run 5 times CV
       SSE = 0
+      span = w / n
       for (i in (1:fold)) {
         test_index = seq(from=1+(i-1)*t*freq, to=min(i*t*freq, k*freq), by=1)
         test = ts[test_index]
 
         train = ts[-test_index]
         train = ts(train, start=c(start_year, 1), frequency = freq)
-        seasonality = seasonal(train, deg=d, window=w)
+        
+        new_w = span * length(train)
+        seasonality = seasonal(train, deg=d, window=new_w)
 
 
         pred = seasonality[1:length(test_index)]
@@ -616,76 +761,242 @@ cv.seasonal = function(ts, d.max=2, window.min=NULL, window.max=NULL, window.con
 
 #cv.trend
 ```{r, echo=TRUE}
-cv.trend = function(ts, d.max = 2, span.min=NULL, span.max=NULL, span.control=NULL, fold=5) {
+# cv.trend = function(ts, d.max = 2, span.min=NULL, span.max=NULL, span.control=NULL, fold=5) {
+#   start_year = tsp(ts)[1]
+#   freq = as.integer(tsp(ts)[3])
+#   n = length(ts)
+#   k = ceiling(n/freq) # total number of cycles
+#   t = ceiling(k/fold) # number of cycles/fold
+#   
+#   # total mean squared error 
+#   minMSE = Inf
+# 
+#   best_degree = 0
+#   best_span = span.min
+#   
+#   n = length(ts)
+#   m = length(ts[!is.na(ts)])
+#   if (is.null(span.min)) {
+#     span.min = 0.1/sqrt(n)
+#   }
+#   
+#   if (is.null(span.max)) {
+#     span.max = 0.5/sqrt(n)
+#   }
+#   
+#   if (is.null(span.control)) {
+#     span.control = (span.max - span.min) / 5
+#   }
+#   
+#   for (d in (1:d.max)) {
+#     for (s in seq(from=span.min, to=span.max, by=span.control)) {
+#       # whole_pred = NULL
+#       # run 5 times CV
+#       SSE = 0
+#       remain_index = c(1:n)
+#       for (i in (1:fold)) {
+#         
+#         test_index = sample(remain_index, size=min(ceiling(n/fold), length(remain_index)), replace=FALSE)
+#         
+#         
+#         # train_index = c(1:n)[-test_index]
+#         
+#         test = ts[test_index]
+#         
+#         train = ts
+#         train[test_index] = NA
+#         
+#         trend = trend(train, deg=d, span=s, impute=TRUE)
+#         pred = trend[test_index]
+#         # whole_pred[test_index] = pred
+#         SSE = SSE + sum((test - pred)^2, na.rm=TRUE)
+#         
+#         remain_index = setdiff(remain_index, test_index)
+#       }
+#       
+#       # MSE = mean((ts-whole_pred)^2, na.rm=TRUE)
+#       MSE = SSE / m
+#       
+#       if (MSE < minMSE) {
+#         best_degree = d
+#         best_span = s
+#         minMSE = MSE
+#       }
+#     }
+#   }
+#   
+#   return (data.frame(best_degree, best_span, minMSE))
+# }
+
+
+
+
+cv.trend = function(ts, d.max = 2, window.min=NULL, window.max=NULL, window.control=NULL, fold=5) {
   start_year = tsp(ts)[1]
   freq = as.integer(tsp(ts)[3])
   n = length(ts)
-  k = ceiling(n/freq) # total number of cycles
-  t = ceiling(k/fold) # number of cycles/fold
-  
-  # total mean squared error 
+  # total mean squared error
   minMSE = Inf
-
   best_degree = 0
-  best_span = span.min
-  
-  n = length(ts)
+  best_window = window.min
   m = length(ts[!is.na(ts)])
-  if (is.null(span.min)) {
-    span.min = 0.1/sqrt(n)
+  if (is.null(window.min)) {
+    window.min = n * 0.05
   }
-  
-  if (is.null(span.max)) {
-    span.max = 0.5/sqrt(n)
+  if (is.null(window.max)) {
+    window.max = n * 0.5
   }
-  
-  if (is.null(span.control)) {
-    span.control = (span.max - span.min) / 5
+  if (is.null(window.control)) {
+    # window.min + increment * (steps - 1) = window.max
+    window.control = (window.max - window.min) / 4
   }
-  
+
+  degree = NULL
+  window = NULL
+  mse = NULL
   for (d in (1:d.max)) {
-    for (s in seq(from=span.min, to=span.max, by=span.control)) {
+    for (w in seq(from=window.min, to=window.max, by=window.control)) {
       # whole_pred = NULL
       # run 5 times CV
       SSE = 0
-      remain_index = c(1:n)
+      #fold length
+      buffer = ceiling(w / 2)
+      u = ceiling((n - 2*buffer) / fold)
       for (i in (1:fold)) {
-        
-        test_index = sample(remain_index, size=min(ceiling(n/fold), length(remain_index)), replace=FALSE)
-        
-        
+        test_index = c((buffer+1+(i-1)*u) : min(n-buffer, buffer+i*u))
         # train_index = c(1:n)[-test_index]
-        
         test = ts[test_index]
-        
         train = ts
         train[test_index] = NA
-        train = ts(train, start=c(start_year,1), frequency=freq)
-        
-        trend = trend(train, deg=d, span=s, impute=TRUE)
+        trend = trend(train, deg=d, window=w, impute=TRUE)
         pred = trend[test_index]
         # whole_pred[test_index] = pred
         SSE = SSE + sum((test - pred)^2, na.rm=TRUE)
-        
-        remain_index = setdiff(remain_index, test_index)
       }
-      
       # MSE = mean((ts-whole_pred)^2, na.rm=TRUE)
       MSE = SSE / m
-      
+
+      degree = c(degree, d)
+      window = c(window, w)
+      mse = c(mse, MSE)
+
       if (MSE < minMSE) {
         best_degree = d
-        best_span = s
+        best_window = w
         minMSE = MSE
       }
     }
   }
-  
-  return (data.frame(best_degree, best_span, minMSE))
+  return (list(best = data.frame(best_degree, best_window, minMSE), chart = data.frame(degree, window, mse)))
 }
 
 
+
+# cv.trend = function(ts, d.max = 2, window.min=NULL, window.max=NULL, window.control=NULL, fold=5) {
+#   start_year = tsp(ts)[1]
+#   freq = as.integer(tsp(ts)[3])
+#   n = length(ts)
+#   # total mean squared error
+#   minMSE = Inf
+#   best_degree = 0
+#   best_window = window.min
+#   m = length(ts[!is.na(ts)])
+#   if (is.null(window.min)) {
+#     window.min = n * 0.05
+#   }
+#   if (is.null(window.max)) {
+#     window.max = n * 0.5
+#   }
+#   if (is.null(window.control)) {
+#     # window.min + increment * (steps - 1) = window.max
+#     window.control = (window.max - window.min) / 9
+#   }
+#   
+#   degree = NULL
+#   window = NULL
+#   mse = NULL
+#   
+#   buffer = ceiling(window.max / 2)
+#   u = ceiling((n - 2*buffer) / fold)
+#   
+#   for (d in (1:d.max)) {
+#     for (w in seq(from=window.min, to=window.max, by=window.control)) {
+#       # whole_pred = NULL
+#       # run 5 times CV
+#       SSE = 0
+#       #fold length
+#       # buffer = ceiling(w / 2)
+#       # u = ceiling((n - 2*buffer) / fold)
+#       for (i in (1:fold)) {
+#         test_index = c((buffer+1+(i-1)*u) : min(n-buffer, buffer+i*u))
+#         # train_index = c(1:n)[-test_index]
+#         test = ts[test_index]
+#         train = ts
+#         train[test_index] = NA
+#         trend = trend(train, deg=d, window=w, impute=TRUE)
+#         pred = trend[test_index]
+#         # whole_pred[test_index] = pred
+#         SSE = SSE + sum((test - pred)^2, na.rm=TRUE)
+#       }
+#       # MSE = mean((ts-whole_pred)^2, na.rm=TRUE)
+#       MSE = SSE / m
+#       
+#       degree = c(degree, d)
+#       window = c(window, w)
+#       mse = c(mse, MSE)
+#       
+#       if (MSE < minMSE) {
+#         best_degree = d
+#         best_window = w
+#         minMSE = MSE
+#       }
+#     }
+#   }
+#   return (list(best = data.frame(best_degree, best_window, minMSE), chart = data.frame(degree, window, mse)))
+# }
 ```
+
+
+
+<!-- ```{r, echo=TRUE} -->
+<!-- start_time = Sys.time() -->
+<!-- res = cv.trend(ts.subset(ts1409,c(1:(365*10)))) -->
+<!-- res$best -->
+<!-- res$chart -->
+<!-- end_time = Sys.time() -->
+<!-- end_time - start_time -->
+
+<!-- ``` -->
+
+
+
+
+
+<!-- ```{r, echo=TRUE} -->
+<!-- train = ts1409 -->
+<!-- buffer = ceiling((0.05 * 13870) / 2) -->
+<!-- u = ceiling((13870 - 2*buffer) / 5) -->
+<!-- train[c((buffer+1+(2-1)*u) : min(13870-buffer, buffer+2*u))] = NA -->
+<!-- trd = trend(train, deg=1, window = 0.1*13870, impute = TRUE) -->
+
+<!-- plot(train, type="l", col = "green") -->
+<!-- lines(ts.subset(ts1409, c((buffer+1+(2-1)*u) : min(13870-buffer, buffer+2*u))), col = "purple") -->
+<!-- lines(trd, col = "blue") -->
+
+<!-- ``` -->
+
+<!-- ```{r, echo=TRUE} -->
+<!-- plot(ts1409, type="l", ylim = c(-5,5), col="green") -->
+<!-- lines(trend(ts1409, window=0.1*length(ts1409)), col="blue") -->
+
+<!-- ``` -->
+
+
+
+
+
+
+
 
 
 
@@ -850,6 +1161,10 @@ convergence.test = function(ts, iter) {
 }
 
 ```
+
+
+
+
 
 
 
@@ -1130,9 +1445,83 @@ convergence.test.cv = function(ts, iter) {
 ```
 
 
+```{r, echo=TRUE}
+interpolate = function(ts, t.window, s.window, t.deg=1, s.deg=2) {
+  copy = ts
+  na_index = which(is.na(ts))
+  if (length(na_index) == 0) {
+    return (ts)
+  }
+  
+  freq = as.integer(tsp(ts)[3])
+  start_year = as.integer(tsp(ts)[1])
+  n = length(ts)
+  
+  i = 1
+  x = NULL
+  trend = NULL
+  season = NULL
+  while (i <= n) {
+    if (!is.na(ts[i])) {
+      cursor = i
+      while (!is.na(ts[cursor])) {
+        x = c(x, cursor)
+        cursor = cursor + 1
+      }
+      cts_sub = ts.subset(ts, x)
+
+      # extract trend on cts_sub
+      # extract seasonal on cts_sub
+      
+      if (length(cts_sub) >= freq) {
+        # extract trend on cts_sub
+        trend = loess(cts_sub ~ x, span=t.window/n, degree=t.deg, family="symmetric", method="loess", control=loess.control(surface="direct"))
+        
+        # extract seasonal on cts_sub
+        season = seasonal(cts_sub-trend$fitted, deg=s.deg, window=s.window)
+        
+        # # extract short term trend on cts_sub
+        # st = loess(cts_sub-trend$fitted-season ~ x, span=7/length(cts_sub), degree=2, family="symmetric", method="loess", control=loess.control(surface="direct"))
+        
+      } else {
+        # not sure
+      }
+      i = cursor
+    }
+    else {
+      day = i %% freq
+      if (day == 0) {
+        day = freq
+      }
+      period = season[1:freq]
+      pred_s = period[day]
+      pred_t = as.numeric(predict(object=trend, newdata=data.frame(x=i)))
+      # pred_st = as.numeric(predict(object=st, newdata=data.frame(x=i)))
+      copy[i] = pred_s + pred_t
+      x = c(x, i)
+      i = i + 1
+    }
+  }
+  
+  return (copy)
+}
+
+```
 
 
+```{r, echo=TRUE, warning=FALSE}
+start_time=Sys.time()
+ts1409copy = interpolate(ts1409, t.window=548, s.window=30*38)
+end_time = Sys.time()
+end_time - start_time
+```
 
 
+```{r, echo=TRUE}
+par(mfrow = c(1,2))
+plot(ts1409, type="b", col="green", xlim=c(1997,2000))
+plot(ts1409copy, type="b", col="blue",xlim=c(1997,2000), ylim=c(-4,4))
 
+
+```
 

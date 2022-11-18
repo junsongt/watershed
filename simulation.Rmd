@@ -1,0 +1,124 @@
+---
+title: "simulation"
+author: "Junsong Tang"
+date: '2022'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tidyverse)
+library(tseries)
+```
+
+
+#simulation
+```{r, echo=TRUE}
+# period = 10
+# 10 periods
+t = c(1 : 100)
+w = (2*pi)/10
+sea = 5*sin(w*t)
+tr = 0.0001 * (t - 20)* (t - 50)* (t - 100)
+# err = rt(length(t), df = 5) #any fat tail distr and picking one side tail
+err = rnorm(length(t))
+# corr = arima.sim(list(order = c(), ar = 0.5, ma = 0.3), n = length(t))
+Xt = sea + tr + err
+Xt = ts(Xt, start=c(2022,1), frequency = 10)
+
+```
+
+```{r, echo=TRUE, warning=FALSE}
+# d = decompose(Xt, s.window = c(1,20), t.window = 40, iter =3)
+dstlp = stlplus::stlplus(Xt, n.p=10, s.window="periodic", inner=2, outer=10)
+
+# t = trend(Xt, window = 95)
+# s = seasonal(Xt - t, window = 30)
+# t_ma = trend.ma(Xt)
+```
+
+
+```{r, echo=TRUE}
+best_tw = function(tr) {
+  min_MSE = Inf
+  best_w = 10
+  for (w in seq(from=10, to=100, by=1)) {
+    t = trend(Xt, window = w)
+    MSE = mean(sqrt((t - tr)^2))
+    if (MSE < min_MSE) {
+      min_MSE = MSE
+      best_w = w
+      
+    }
+    
+  }
+  
+  return (best_w)
+}
+
+
+```
+
+
+
+```{r, echo=TRUE, warning=FALSE}
+t = trend(Xt, window = best_tw(tr))
+res = cv.seasonal(Xt - t, window.min=10, window.max=50)
+s = seasonal(Xt - t, deg=res$best_deg, window=res$best_window)
+
+
+```
+
+
+
+```{r, echo=TRUE}
+plot(Xt, type = "b", col="grey")
+
+lines(ts(dstlp$data[,"seasonal"], start =c(2022,1), frequency = 10), type = "l", col = "blue")
+lines(ts(dstlp$data[,"trend"], start =c(2022,1), frequency = 10), type = "l", col = "blue")
+# # lines(ts(dstlp$data[,"seasonal"]+dstlp$data[,"trend"], start =c(2022,1), frequency = 10), type = "l", col = "blue")
+lines(s, type = "l", col = "red")
+lines(t, type = "l", col = "red")
+lines(ts(sea, start =c(2022,1), frequency = 10), type = "l", col="green")
+lines(ts(tr, start =c(2022,1), frequency = 10), type = "l", col="green")
+# legend("bottomright",legend=c("true","loess", "stlplus"), lty=1,
+#        col=c("green","red", "blue"))
+
+```
+
+#Remark:
+```{r, echo=TRUE}
+mean(sqrt((s - sea)^2))
+mean(sqrt((dstlp$data[,"seasonal"] - sea)^2))
+
+
+mean(sqrt((t - tr)^2))
+mean(sqrt((dstlp$data[,"trend"] - tr)^2))
+
+
+mean(sqrt((s+t - (sea+tr))^2))
+mean(sqrt((dstlp$data[,"seasonal"]+ dstlp$data[,"trend"] - (sea+tr))^2))
+```
+
+
+```{r, echo=TRUE, warning=FALSE}
+spans = seq(from=0.05, to=1, by=0.01)
+vars = lapply(spans, FUN=function(x) {variation(Xt, x)})
+sv = sapply(vars, FUN=function(x){x$sv})
+tv = sapply(vars, FUN=function(x){x$tv})
+rv = sapply(vars, FUN=function(x){x$rv})
+# s_spans = sapply(vars, FUN=function(x){x$s.span})
+
+```
+
+
+
+```{r, echo=TRUE}
+plot(x = spans, y = sv, type = "b",  main = "variation", col = "green")
+lines(x = spans, y = tv, type = "b", col = "blue")
+lines(x = spans, y = rv, type = "b", col = "red")
+legend("topright",legend=c("seasonal","trend", "remainder"), lty=1,
+       col=c("green","blue", "red"))
+
+```

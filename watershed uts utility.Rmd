@@ -357,6 +357,53 @@ ts.subset = function(ts, index) {
 ```
 
 
+```{r}
+seasonal.shuffle = function(ts) {
+  freq = as.integer(tsp(ts)[3])
+  n = length(ts)
+  # number of cycles
+  k = ceiling(length(ts)/freq)
+  
+  equi_class = list()
+  for (i in (1:freq)) {
+
+    indices = seq(from=i, to=i+(k-1)*freq, by=freq)
+    
+    cluster = ts[indices]
+    # clear out NA
+    cluster = cluster[!is.na(cluster)]
+    equi_class[[i]] = cluster
+
+  }
+  return (equi_class)
+}
+
+
+
+```
+
+
+```{r}
+rough.season = function(ts) {
+  freq = as.integer(tsp(ts)[3])
+  n = length(ts)
+  # number of cycles
+  k = ceiling(length(ts)/freq)
+  start_year = as.integer(tsp(ts)[1])
+  cycle_copy = unlist(lapply(seasonal.shuffle(ts), FUN=function(x){median(x)}))
+  init_season = rep(cycle_copy, k)
+  init_season = init_season[1:n]
+  return (ts(init_season, start=c(start_year,1), frequency = freq))
+}
+
+
+
+```
+
+
+
+
+
 #=======================================================================================
 # Seasonal & Trend
 
@@ -365,76 +412,6 @@ LOESS method
 
 # Seasonal
 ```{r, echo=TRUE}
-# seasonal = function(ts, deg=2, window=length(ts), iter=4) {
-#   freq = as.integer(tsp(ts)[3])
-#   # number of cycles
-#   k = ceiling(length(ts)/freq)
-#   start_year = as.integer(tsp(ts)[1])
-#   # form data frame arranged in same day order
-#   x = NULL
-#   y = NULL
-#   z = NULL
-#   for (i in (1:freq)) {
-#     indices = seq(from=i, to=i+(k-1)*freq, by=freq)
-#     cluster = ts[indices]
-#     # clear out NA
-#     cluster = cluster[!is.na(cluster)]
-#     x = c(x, rep(i, length(cluster)))
-#     y = c(y, cluster)
-#     # set up marker such that it represents the pos that we should extract the fitted value
-#     z = c(z, TRUE, rep(FALSE, length(cluster)-1))
-# 
-#   }
-#   # df = data.frame(x, y)
-#   span = window / length(ts)
-#   loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control =loess.control(iterations=iter))
-# 
-#   full_period = loess_obj$fitted[which(z==TRUE)]
-#   seasonality = rep(full_period, k)
-# 
-#   return (ts(seasonality, start=c(start_year,1), frequency = freq))
-# }
-
-
-
-# seasonal = function(ts, deg=2, window=length(ts), iter=4) {
-#   freq = as.integer(tsp(ts)[3])
-#   # number of cycles
-#   k = ceiling(length(ts)/freq)
-#   start_year = as.integer(tsp(ts)[1])
-#   # form data frame arranged in same day order
-#   x = NULL
-#   y = NULL
-#   z = NULL
-#   for (i in (1:freq)) {
-#     indices = seq(from=i, to=i+(k-1)*freq, by=freq)
-#     cluster = ts[indices]
-#     # clear out NA
-#     cluster = cluster[!is.na(cluster)]
-#     x = c(x, rep(i, length(cluster)))
-#     y = c(y, cluster)
-#     # set up marker such that it represents the pos that we should extract the fitted value
-#     z = c(z, TRUE, rep(FALSE, length(cluster)-1))
-# 
-#   }
-#   # df = data.frame(x, y)
-# 
-#   y = rep(y, times = 3)
-#   # x = rep(x, times = 3)
-#   x = c((x-freq),x,(x+freq))
-#   z = rep(z, times = 3)
-# 
-#   span = window / length(ts)
-# 
-#   loess_obj = loess(y ~ x, span=span, degree=deg, family="symmetric", method="loess", control =loess.control(iterations=iter))
-# 
-#   full_period = loess_obj$fitted[which(z==TRUE)][c((freq+1) : (2*freq))]
-#   seasonality = rep(full_period, k)
-# 
-#   return (ts(seasonality, start=c(start_year,1), frequency = freq))
-# }
-
-
 seasonal = function(ts, deg=2, window=length(ts), iter=4) {
   freq = as.integer(tsp(ts)[3])
   # number of cycles
@@ -491,46 +468,6 @@ seasonal = function(ts, deg=2, window=length(ts), iter=4) {
 
 
 
-<!-- # trend(MA over one full period) -->
-<!-- ```{r, echo=TRUE} -->
-<!-- ma.smooth = function(x, lag) { -->
-<!--   n = length(x) -->
-<!--   result = NULL -->
-<!--   for (i in (1:(n-lag))) { -->
-<!--     avg = mean(x[i:(i+lag)], na.rm = TRUE) -->
-<!--     result = c(result, avg) -->
-<!--   } -->
-<!--   return (result) -->
-<!-- } -->
-
-
-<!-- trend.ma = function(ts) { -->
-<!--   freq = as.integer(tsp(ts)[3]) -->
-<!--   n = length(ts) -->
-<!--   start_year = as.integer(tsp(ts)[1]) -->
-
-<!--   trend = NULL -->
-<!--   final_trend = rep(NA, n) -->
-<!--   # freq=5, w=2, freq=4, w=1.5 -->
-<!--   window  = (freq-1) / 2 -->
-<!--   # if freq = odd -->
-<!--   if (freq %% 2 != 0) { -->
-<!--     trend = ma.smooth(ts, lag=2*window) -->
-<!--     # padding head & tail -->
-<!--     final_trend[(window+1):(n-window)] = trend -->
-<!--   } -->
-<!--   else { -->
-<!--     temp = ma.smooth(ts, lag=2*window) -->
-<!--     trend = ma.smooth(temp, lag = 1) -->
-<!--     # padding head & tail -->
-<!--     w = window + 0.5 -->
-<!--     final_trend[(w+1):(n-w)] = trend -->
-<!--   } -->
-
-<!--   return (ts(final_trend, start=c(start_year, 1), frequency = freq)) -->
-
-<!-- } -->
-<!-- ``` -->
 
 
 # Trend
@@ -565,108 +502,6 @@ trend = function(ts, deg=2, window=length(ts), iter=4, impute=FALSE) {
 
 
 
-# trend = function(ts, deg=2, window=length(ts), iter=4, impute=FALSE) {
-#   freq = as.integer(tsp(ts)[3])
-#   start_year = as.integer(tsp(ts)[1])
-#   n = length(ts)
-#   if (freq %% 2 != 0) {
-#     y = stats::filter(ts, rep(1,freq), method=c("convolution"), sides=2, circular=FALSE) / freq
-#   } else {
-#     y = stats::filter(ts, c(0.5, rep(1,freq-1), 0.5), method=c("convolution"), sides=2, circular=FALSE) / freq
-#   }
-# 
-#   x = c(1:n)
-#   span = window / length(ts)
-#   loess_obj = loess(y ~ x, na.action=na.exclude, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
-# 
-#   na_index = which(is.na(ts))
-#   to_be_pad = setdiff(which(is.na(y)), which(is.na(ts)))
-#   y[to_be_pad] = as.numeric(predict(object=loess_obj, newdata=data.frame(x=to_be_pad)))
-#   # if no NAs
-#   if (length(na_index) == 0) {
-#     y[-to_be_pad] = loess_obj$fitted
-#   }
-#   # if there are NAs
-#   else {
-#     y[-c(na_index, to_be_pad)] = loess_obj$fitted
-#   }
-# 
-#   if (impute) {
-#     y[na_index] = as.numeric(predict(object=loess_obj, newdata=data.frame(x=na_index)))
-#   }
-#   else {
-#     y[na_index] = NA
-#   }
-# 
-#   return (ts(y, start = c(start_year,1), frequency = freq))
-# }
-
-
-
-# trend = function(ts, deg=2, window=length(ts), iter=4, impute=FALSE) {
-#   freq = as.integer(tsp(ts)[3])
-#   start_year = as.integer(tsp(ts)[1])
-#   n = length(ts)
-#   i = 1
-#   na_index = NULL
-#   y = NULL
-#   while (i <= n) {
-#     if (!is.na(ts[i])) {
-#       accumulator = i
-#       x = NULL
-#       while (!is.na(ts[accumulator])) {
-#         x = c(x, accumulator)
-#         accumulator = accumulator + 1
-#       }
-#       cts_sub = ts.subset(ts, x)
-#       if (length(cts_sub) >= freq) {
-#         if (freq %% 2 != 0) {
-#           t_ma = stats::filter(cts_sub, rep(1,freq), method=c("convolution"), sides=2, circular=FALSE) / freq
-#         } else {
-#           t_ma = stats::filter(cts_sub, c(0.5, rep(1,freq-1), 0.5), method=c("convolution"), sides=2, circular=FALSE) / freq
-#         }
-# 
-#         span = window / length(t_ma)
-#         x = c(1:length(t_ma))
-#         loess_obj = loess(t_ma ~ x, na.action=na.exclude, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
-#         index = which(is.na(t_ma))
-#         t_ma[-index] = loess_obj$fitted
-#         t_ma[index] = as.numeric(predict(object=loess_obj, newdata=data.frame(x=index)))
-# 
-# 
-#         y = c(y, t_ma)
-#       } else {
-#         y = c(y, rep(NA, length(cts_sub)))
-#       }
-#       i = accumulator
-#     }
-#     else {
-#       na_index = c(na_index, i)
-#       y = c(y, NA)
-#       i = i + 1
-#     }
-#   }
-# 
-#   # span = window / length(ts)
-#   # x = c(1:n)
-#   # loess_obj = loess(y ~ x, na.action=na.exclude, span=span, degree=deg, family="symmetric", method="loess", control=loess.control(surface="direct", iterations=iter))
-#   # # if no NAs
-#   # if (length(na_index) == 0) {
-#   #   y = loess_obj$fitted
-#   # }
-#   # # if there are NAs
-#   # else {
-#   #   y[-na_index] = loess_obj$fitted
-#   # }
-#   #
-#   # if (impute) {
-#   #   y[na_index] = as.numeric(predict(object=loess_obj, newdata=data.frame(x=na_index)))
-#   # }
-# 
-#   return (list(trend = ts(y, start = c(start_year,1), frequency = freq),
-#                loess = loess_obj))
-# }
-
 
 
 ```
@@ -679,16 +514,10 @@ trend = function(ts, deg=2, window=length(ts), iter=4, impute=FALSE) {
 
 
 
-
-Cross Validation
-$$\text{metric used: }\frac1n \sum_{i=1}^{n} \varepsilon_{i}^2$$
-$$\text{In k-fold CV, }\sum_{j=1}^k n_j = n$$
-
-
-# common suggestion of truncation point M = 2*sqrt(N);(M<N)
 #cv.seasonal
 ```{r, echo=TRUE}
-cv.seasonal = function(ts, d.max=2, window.min=NULL, window.max=NULL, window.control=NULL, fold=5) {
+# ts parameter is usually a de-trended time series
+cv.seasonal = function(ts, d.max=2, span.min=NULL, span.max=NULL, increment=NULL, fold=5) {
   start_year = tsp(ts)[1]
   freq = as.integer(tsp(ts)[3])
   n = length(ts)
@@ -699,31 +528,41 @@ cv.seasonal = function(ts, d.max=2, window.min=NULL, window.max=NULL, window.con
   minMSE = Inf
 
   best_degree = 0
-  best_window = window.min
+  best_span = span.min
 
   n = length(ts)
   m = length(ts[!is.na(ts)])
-  if (is.null(window.min)) {
-    # window.min = (10/sqrt(n)) * n
-    window.min = 0.1 * n
-  }
+  # if (is.null(window.min)) {
+  #   # window.min = (10/sqrt(n)) * n
+  #   window.min = 0.1 * n
+  # }
+  # 
+  # if (is.null(window.max)) {
+  #   # window.max = (20/sqrt(n)) * n
+  #   window.max = 0.2 * n
+  # }
+  
+  
+  # if (is.null(window.min)) {
+  #   window.min = k
+  # }
+  # 
+  # if (is.null(window.max)) {
+  #   window.max = 10 * k
+  # }
 
-  if (is.null(window.max)) {
-    # window.max = (20/sqrt(n)) * n
-    window.min = 0.2 * n
-  }
-
-  if (is.null(window.control)) {
+  if (is.null(increment)) {
     # window.min + increment * (steps - 1) = window.max
-    window.control = (window.max - window.min) / (10 - 1)
+    # usually do 10 steps
+    increment = (span.max - span.min) / (10 - 1)
   }
 
   for (d in (1:d.max)) {
-    for (w in seq(from=window.min, to=window.max, by=window.control)) {
+    for (span in seq(from=span.min, to=span.max, by=increment)) {
       # whole_pred = NULL
       # run 5 times CV
       SSE = 0
-      span = w / n
+      
       for (i in (1:fold)) {
         test_index = seq(from=1+(i-1)*t*freq, to=min(i*t*freq, k*freq), by=1)
         test = ts[test_index]
@@ -746,577 +585,63 @@ cv.seasonal = function(ts, d.max=2, window.min=NULL, window.max=NULL, window.con
 
       if (MSE < minMSE) {
         best_degree = d
-        best_window = w
+        best_span = span
         minMSE = MSE
       }
     }
   }
 
-  return (data.frame(best_degree, best_window, minMSE))
+  return (data.frame(best_degree, best_span, minMSE))
 }
 
 ```
 
 
-```{r, echo=TRUE}
-start_time = Sys.time()
-cv.seasonal(ts1409)
-end_time = Sys.time()
-end_time - start_time
-
-```
-
-
-#cv.trend
-```{r, echo=TRUE}
-# cv.trend = function(ts, d.max = 2, span.min=NULL, span.max=NULL, span.control=NULL, fold=5) {
-#   start_year = tsp(ts)[1]
-#   freq = as.integer(tsp(ts)[3])
-#   n = length(ts)
-#   k = ceiling(n/freq) # total number of cycles
-#   t = ceiling(k/fold) # number of cycles/fold
-#   
-#   # total mean squared error 
-#   minMSE = Inf
-# 
-#   best_degree = 0
-#   best_span = span.min
-#   
-#   n = length(ts)
-#   m = length(ts[!is.na(ts)])
-#   if (is.null(span.min)) {
-#     span.min = 0.1/sqrt(n)
-#   }
-#   
-#   if (is.null(span.max)) {
-#     span.max = 0.5/sqrt(n)
-#   }
-#   
-#   if (is.null(span.control)) {
-#     span.control = (span.max - span.min) / 5
-#   }
-#   
-#   for (d in (1:d.max)) {
-#     for (s in seq(from=span.min, to=span.max, by=span.control)) {
-#       # whole_pred = NULL
-#       # run 5 times CV
-#       SSE = 0
-#       remain_index = c(1:n)
-#       for (i in (1:fold)) {
-#         
-#         test_index = sample(remain_index, size=min(ceiling(n/fold), length(remain_index)), replace=FALSE)
-#         
-#         
-#         # train_index = c(1:n)[-test_index]
-#         
-#         test = ts[test_index]
-#         
-#         train = ts
-#         train[test_index] = NA
-#         
-#         trend = trend(train, deg=d, span=s, impute=TRUE)
-#         pred = trend[test_index]
-#         # whole_pred[test_index] = pred
-#         SSE = SSE + sum((test - pred)^2, na.rm=TRUE)
-#         
-#         remain_index = setdiff(remain_index, test_index)
-#       }
-#       
-#       # MSE = mean((ts-whole_pred)^2, na.rm=TRUE)
-#       MSE = SSE / m
-#       
-#       if (MSE < minMSE) {
-#         best_degree = d
-#         best_span = s
-#         minMSE = MSE
-#       }
-#     }
-#   }
-#   
-#   return (data.frame(best_degree, best_span, minMSE))
-# }
-
-
-
-# #based on imputed data
-# cv.trend = function(ts, d.max = 2, window.min=NULL, window.max=NULL, window.control=NULL, fold=5) {
-#   start_year = tsp(ts)[1]
-#   freq = as.integer(tsp(ts)[3])
-#   n = length(ts)
-#   # total mean squared error
-#   minMSE = Inf
-#   best_degree = 0
-#   best_window = window.min
-#   m = length(ts[!is.na(ts)])
-#   if (is.null(window.min)) {
-#     window.min = n * 0.05
-#   }
-#   if (is.null(window.max)) {
-#     window.max = n * 0.5
-#   }
-#   if (is.null(window.control)) {
-#     # window.min + increment * (steps - 1) = window.max
-#     window.control = (window.max - window.min) / 4
-#   }
-# 
-#   degree = NULL
-#   window = NULL
-#   mse = NULL
-#   for (d in (1:d.max)) {
-#     for (w in seq(from=window.min, to=window.max, by=window.control)) {
-#       # whole_pred = NULL
-#       # run 5 times CV
-#       SSE = 0
-#       #fold length
-#       buffer = ceiling(w / 2)
-#       u = ceiling((n - 2*buffer) / fold)
-#       for (i in (1:fold)) {
-#         test_index = c((buffer+1+(i-1)*u) : min(n-buffer, buffer+i*u))
-#         # train_index = c(1:n)[-test_index]
-#         test = ts[test_index]
-#         train = ts
-#         train[test_index] = NA
-#         trend = trend(train, deg=d, window=w, impute=TRUE)
-#         pred = trend[test_index]
-#         # whole_pred[test_index] = pred
-#         SSE = SSE + sum((test - pred)^2, na.rm=TRUE)
-#       }
-#       # MSE = mean((ts-whole_pred)^2, na.rm=TRUE)
-#       MSE = SSE / m
-# 
-#       degree = c(degree, d)
-#       window = c(window, w)
-#       mse = c(mse, MSE)
-# 
-#       if (MSE < minMSE) {
-#         best_degree = d
-#         best_window = w
-#         minMSE = MSE
-#       }
-#     }
-#   }
-#   return (list(best = data.frame(best_degree, best_window, minMSE), chart = data.frame(degree, window, mse)))
-# }
-
-
-
-# cv.trend = function(ts, d.max = 2, window.min=NULL, window.max=NULL, window.control=NULL, fold=5) {
-#   start_year = tsp(ts)[1]
-#   freq = as.integer(tsp(ts)[3])
-#   n = length(ts)
-#   # total mean squared error
-#   minMSE = Inf
-#   best_degree = 0
-#   best_window = window.min
-#   m = length(ts[!is.na(ts)])
-#   if (is.null(window.min)) {
-#     window.min = n * 0.05
-#   }
-#   if (is.null(window.max)) {
-#     window.max = n * 0.5
-#   }
-#   if (is.null(window.control)) {
-#     # window.min + increment * (steps - 1) = window.max
-#     window.control = (window.max - window.min) / 9
-#   }
-#   
-#   degree = NULL
-#   window = NULL
-#   mse = NULL
-#   
-#   buffer = ceiling(window.max / 2)
-#   u = ceiling((n - 2*buffer) / fold)
-#   
-#   for (d in (1:d.max)) {
-#     for (w in seq(from=window.min, to=window.max, by=window.control)) {
-#       # whole_pred = NULL
-#       # run 5 times CV
-#       SSE = 0
-#       #fold length
-#       # buffer = ceiling(w / 2)
-#       # u = ceiling((n - 2*buffer) / fold)
-#       for (i in (1:fold)) {
-#         test_index = c((buffer+1+(i-1)*u) : min(n-buffer, buffer+i*u))
-#         # train_index = c(1:n)[-test_index]
-#         test = ts[test_index]
-#         train = ts
-#         train[test_index] = NA
-#         trend = trend(train, deg=d, window=w, impute=TRUE)
-#         pred = trend[test_index]
-#         # whole_pred[test_index] = pred
-#         SSE = SSE + sum((test - pred)^2, na.rm=TRUE)
-#       }
-#       # MSE = mean((ts-whole_pred)^2, na.rm=TRUE)
-#       MSE = SSE / m
-#       
-#       degree = c(degree, d)
-#       window = c(window, w)
-#       mse = c(mse, MSE)
-#       
-#       if (MSE < minMSE) {
-#         best_degree = d
-#         best_window = w
-#         minMSE = MSE
-#       }
-#     }
-#   }
-#   return (list(best = data.frame(best_degree, best_window, minMSE), chart = data.frame(degree, window, mse)))
-# }
-
-
-```
-
-
-
 
 ```{r, echo=TRUE}
-# take not very big continuous test set, i.e. 10days, 20days....100days
-# cv.trend = function(ts, d.max = 2, window.min=NULL, window.max=NULL, window.control=NULL, fold=5) {
-#   start_year = tsp(ts)[1]
-#   freq = as.integer(tsp(ts)[3])
-#   n = length(ts)
-#   k = ceiling(n/freq) # total number of cycles(years)
-#   # total mean squared error
-#   minMSE = Inf
-#   best_degree = 0
-#   best_window = window.min
-#   m = length(ts[!is.na(ts)])
-#   if (is.null(window.min)) {
-#     window.min = n * 0.01
-#   }
-#   if (is.null(window.max)) {
-#     window.max = n * 0.05
-#   }
-#   if (is.null(window.control)) {
-#     # window.min + increment * (steps - 1) = window.max
-#     window.control = (window.max - window.min) / 5
-#   }
-# 
-#   degree = NULL
-#   window = NULL
-#   mse = NULL
-#   
-#   plots=list()
-#   
-#   remain_yrs = c(2:(k-1))
-#   #yrs is the year index of test set
-#   yrs = NULL
-#   for (i in (1:fold)) {
-#     year = sample(remain_yrs, size=min(1, length(remain_yrs)), replace=FALSE)
-#     yrs = c(yrs, year)
-#     remain_yrs = setdiff(remain_yrs, year)
-#   }
-#   
-#   for (d in (1:d.max)) {
-#     for (w in seq(from=window.min, to=window.max, by=window.control)) {
-#       # whole_pred = NULL
-#       # run 5 times CV
-#       SSE = 0
-#       # remain_yrs = c(2:(k-1))
-#       complete_fold_pred = NULL
-#       complete_fold_test_index = NULL
-#       for (i in (1:fold)) {
-#         
-#         # test set index in each fold
-#         # (1) randomly pick a year from remaining year collection i.e. initially (2:37)
-#         # (2) pick continuous monotone interval of fixed length
-#         
-#         # yr = sample(remain_yrs, size=min(1, length(remain_yrs)), replace=FALSE)
-#         yr = yrs[i]
-#         
-#         if (freq %% 2 != 1) {
-#           c = (freq+1) / 2
-#           test_index = c((c-40) : (c+40)) + (yr-1)*freq  # 11 days
-#         } else {
-#           c = freq / 2
-#           test_index = c((c-4) : (c+5)) + (yr-1)*freq  # 10 days
-#         }
-#         
-#         
-#         # train_index = c(1:n)[-test_index]
-#         test = ts[test_index]
-#         train = ts
-#         train[test_index] = NA
-#         trend = trend(train, deg=d, window=w, impute=TRUE)
-#         t_pred = trend[test_index]
-#         season = seasonal(ts-trend, deg=1, window=30*k)[1:freq]
-#         s_pred = season[(test_index[1]%%freq) : (test_index[length(test_index)]%%freq)]
-#         pred = t_pred + s_pred
-#         # whole_pred[test_index] = pred
-#         SSE = SSE + sum((test - pred)^2, na.rm=TRUE)
-#         
-#         complete_fold_test_index = c(complete_fold_test_index, test_index)
-#         complete_fold_pred = c(complete_fold_pred, pred)
-#         
-#         # remain_yrs = setdiff(remain_yrs, yr)
-#       }
-#       
-#       # MSE = mean((ts-whole_pred)^2, na.rm=TRUE)
-#       MSE = SSE / m
-# 
-#       degree = c(degree, d)
-#       window = c(window, w)
-#       mse = c(mse, MSE)
-# 
-#       if (MSE < minMSE) {
-#         best_degree = d
-#         best_window = w
-#         minMSE = MSE
-#       }
-#       
-#       # p = ts.subset(ts, complete_fold_test_index)
-#       # p[complete_fold_test_index] = complete_fold_pred
-#       # # make plot for each fix (d,w) in full-fold loop
-#       # p = ggplot() +
-#       #   geom_line(data=ts, aes(x=(1980:2018) , y=ts), color="green") +
-#       #   geom_line(data=p, aes(x=(1980:2018), y=p), color="red") +
-#       #   ggtitle(paste("degree=", d, "window=", w))
-#       # 
-#       # 
-#       # plots = append(plots, p)
-#       
-#     }
-#   }
-#   return (list(best = data.frame(best_degree, best_window, minMSE), chart = data.frame(degree, window, mse), plots = plots))
-# }
-
-
-
-```
-
-
-
-
-
-
-
-```{r, echo=TRUE, warning=FALSE}
-start_time=Sys.time()
-res = cv.trend(ts1409)
-end_time = Sys.time()
-end_time - start_time
-```
-
-
-
-
-
-
-
-```{r, echo=TRUE}
-x = c(0:(20*pi))
-sim_ts = ts(sin(x) + x, start = c(1990, 1), freq = 2*pi)  
-
-
-
-```
-
-
-
-
-<!-- ```{r, echo=TRUE} -->
-<!-- start_time = Sys.time() -->
-<!-- res = cv.trend(ts.subset(ts1409,c(1:(365*10)))) -->
-<!-- res$best -->
-<!-- res$chart -->
-<!-- end_time = Sys.time() -->
-<!-- end_time - start_time -->
-
-<!-- ``` -->
-
-
-
-
-
-<!-- ```{r, echo=TRUE} -->
-<!-- train = ts1409 -->
-<!-- buffer = ceiling((0.05 * 13870) / 2) -->
-<!-- u = ceiling((13870 - 2*buffer) / 5) -->
-<!-- train[c((buffer+1+(2-1)*u) : min(13870-buffer, buffer+2*u))] = NA -->
-<!-- trd = trend(train, deg=1, window = 0.1*13870, impute = TRUE) -->
-
-<!-- plot(train, type="l", col = "green") -->
-<!-- lines(ts.subset(ts1409, c((buffer+1+(2-1)*u) : min(13870-buffer, buffer+2*u))), col = "purple") -->
-<!-- lines(trd, col = "blue") -->
-
-<!-- ``` -->
-
-<!-- ```{r, echo=TRUE} -->
-<!-- plot(ts1409, type="l", ylim = c(-5,5), col="green") -->
-<!-- lines(trend(ts1409, window=0.1*length(ts1409)), col="blue") -->
-
-<!-- ``` -->
-
-
-
-
-
-
-
-
-
-
-
-
-
-<!-- ```{r, echo=TRUE} -->
-<!-- cv.st = function(ts, d.max = 2, window.min=NULL, window.max=NULL, window.control=NULL) { -->
-<!--   n = length(ts) -->
-<!--   m = length(ts[!is.na(ts)]) -->
-
-<!--   # total mean squared error  -->
-<!--   minMSE = Inf -->
-
-<!--   if (is.null(window.min)) { -->
-<!--     window.min = 7 -->
-<!--   } -->
-
-<!--   if (is.null(window.max)) { -->
-<!--     window.max = 31 -->
-<!--   } -->
-
-<!--   if (is.null(window.control)) { -->
-<!--     window.control = 6 -->
-<!--   } -->
-
-
-<!--   best_degree = 0 -->
-<!--   best_window = window.min -->
-
-
-<!--   for (d in (1:d.max)) { -->
-<!--     for (w in seq(from=window.min, to=window.max, by=window.control)) { -->
-<!--       # run n times CV -->
-<!--       SSE = 0 -->
-
-<!--       if (w %% 2 == 0) { -->
-<!--         w = w + 1 -->
-<!--       } -->
-
-<!--       for (i in (1:n)) { -->
-<!--         test = ts[i] -->
-
-<!--         r = (w - 1) / 2 -->
-
-<!--         if (i <= r) { -->
-<!--           interval = c(1 : w) -->
-<!--           center = i -->
-<!--         } -->
-<!--         else if (i > n - r) { -->
-<!--           interval = c((n-w+1) : n) -->
-<!--           center = i - (n-w) -->
-<!--         } -->
-<!--         else { -->
-<!--           interval = c((i-r) : (i+r)) -->
-<!--           center = 1 + r -->
-<!--         } -->
-<!--         neighbourhood = ts.subset(ts, interval) -->
-<!--         neighbourhood[center] = NA -->
-
-<!--         local_trend = trend(neighbourhood, deg=d, span=1, impute=TRUE) -->
-<!--         pred = local_trend[center] -->
-<!--         SSE = SSE + sum((test - pred)^2, na.rm=TRUE) -->
-
-<!--       } -->
-
-<!--       MSE = SSE / m -->
-
-<!--       if (MSE < minMSE) { -->
-<!--         best_degree = d -->
-<!--         best_window = w -->
-<!--         minMSE = MSE -->
-<!--       } -->
-<!--     } -->
-<!--   } -->
-
-<!--   return (data.frame(best_degree, best_window, minMSE)) -->
-<!-- } -->
-
-<!-- ``` -->
-
-
-
-
-
-
-(4) Convergence test(alternate season & trend extraction difference convergence test)
-(I) trend > seasonal
-\[\begin{cases}
-X - t_1 = s_1 + \varepsilon_1 \\
-X - s_1 = t_2 + \varepsilon_2 \\
-X - t_2 = s_2 + \varepsilon_3 \\
-\ldots \\
-X - t_{n-1} = s_{n-1} + \varepsilon_{2n-3} \\
-X - s_{n-1} = t_n + \varepsilon_{2n-2} \\
-X - t_n = s_n + \varepsilon_{2n-1}
-\end{cases}\]
-
-(II) trend -> seasonal -> short term trend
-\[\begin{cases}
-X - t_1 - s_1 - st_1 = \varepsilon_1 \\
-X - s_1 - st_1 = t_2 + \varepsilon_2 \\
-X - t_2 - st_1 = s_2 + \varepsilon_3 \\
-X - t_2 - s_2 = st_2 + \varepsilon_4 \\
-\ldots \\
-X - s_{n-1} - st_{n-1} =  t_n + \varepsilon_{3n-4} \\
-X - t_n - st_{n-1} = s_n + \varepsilon_{3n-3} \\
-X - t_n - s_n = st_n + \varepsilon_{3n-2} \\
-\end{cases}\]
-
-```{r, echo=TRUE}
-convergence.test = function(ts, iter) {
-  ds = NULL
-  dt = NULL
-  dst = NULL
+# para: (deg, span)
+mse.cv.seasonal = function(ts, deg, span, fold = 5) {
+  start_year = tsp(ts)[1]
   freq = as.integer(tsp(ts)[3])
   n = length(ts)
-  k = ceiling(n/freq)
+  m = length(ts[!is.na(ts)])
+  k = ceiling(n/freq) # total number of cycles
+  t = round(k/fold) # number of cycles/fold
   
-  true_iter = 3 * iter - 2
-  
-  s_span = 15 / sqrt(n)
-  s_window = s_span * n
-  t_window = (1.5 * freq) / (1 - (1.5/s_window))
-  
-  
-  st_window = 7
-  
-  prev_season = rep(0, length(ts))
-  prev_trend = rep(0, length(ts))
-  prev_st = rep(0, length(ts))
-  for (i in (1:true_iter)) {
-    if (i == 1) {
-      curr_trend = trend(ts, deg=1, window=t_window)
-      curr_season = seasonal(ts - curr_trend, deg=1, window=s_window)
-      curr_st = trend(ts - curr_trend - curr_season, deg=2, window=st_window)
-      ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
-      dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
-      dst = c(dst, mean((curr_st - prev_st)^2, na.rm=TRUE))
-      prev_trend = curr_trend
-      prev_season = curr_season
-      prev_st = curr_st
-    }
-    else if (i %% 3 == 2) {
-      curr_trend = trend(ts - prev_season - prev_st, deg=1, window=t_window)
-      dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE))
-      prev_trend = curr_trend
-    }
-    else if (i %% 3 == 0) {
-      curr_season = seasonal(ts - prev_trend - prev_st, deg=1, window=s_window)
-      ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE))
-      prev_season = curr_season
-    }
-    else {
-      curr_st = trend(ts - prev_trend - prev_season, deg=2, window=st_window)
-      dst = c(dst, mean((curr_st - prev_st)^2, na.rm=TRUE))
-      prev_st = curr_st
-    }
+  # throw exception!
+  if ((span * n) / k <= 3) {
+    return ("span is too small")
   }
   
-  return(data.frame(ds, dt, dst))
+  
+  SSE = 0
+  for (i in (1:fold)) {
+    test_index = seq(from=1+(i-1)*t*freq, to=min(i*t*freq, k*freq), by=1)
+    test = ts[test_index]
+    
+    train = ts[-test_index]
+    train = ts(train, start=c(start_year, 1), frequency = freq)
+    
+    new_w = span * length(train)
+    seasonality = seasonal(train, deg=deg, window=new_w)
+    
+    
+    pred = seasonality[1:length(test_index)]
+    # whole_pred[test_index] = pred
+    SSE = SSE + sum((test - pred)^2, na.rm=TRUE)
+    
+  }
+  # MSE = mean((ts - whole_pred)^2, na.rm=TRUE)
+  MSE = SSE / m
+  
+  return (MSE)
+  
 }
 
+
+
 ```
+
 
 
 
@@ -1338,370 +663,29 @@ $$X - t_{n-1} = s_{n-1} + \varepsilon_{2n-3}$$
 $$X - s_{n-1} = t_n + \varepsilon_{2n-2}$$
 $$X - t_n = s_n + \varepsilon_{2n-1}$$
 
-```{r, echo=TRUE}
-# de-trend first
-# s.window must be the subset of [1, 365]
-# decompose = function(ts, s.deg=1, t.deg=1, s.window=NULL, t.window=NULL, iter=3, cv.control = list(increment=NULL, fold=5)) {
-#   freq = as.integer(tsp(ts)[3])
-#   n = length(ts)
-#   k = ceiling(n/freq)
-#   true_iter = 2 * iter - 1
-# 
-#   if (is.null(t.window)) {
-#     t.window = 1.5 * freq
-#   }
-#   
-#   # if (is.null(s.window)) {
-#   #   s.window = n * c(10/sqrt(n), 20/sqrt(n))
-#   # }
-#   if (is.null(s.window)) {
-#     s.window = k * c(30, 60)
-#   } else {
-#     s.window = k * s.window
-#   }
-#   
-#   if (is.null(cv.control$increment)) {
-#     cv.control$increment = (max(s.window) - min(s.window)) / 10
-#   }
-#   opt_deg = s.deg
-#   opt_window = n
-# 
-#   prev_season = rep(0, length(ts))
-#   prev_trend = rep(0, length(ts))
-#   for (i in (1:true_iter)) {
-#     if (i == 1) {
-#       curr_trend = trend(ts, deg=t.deg, window=t.window)
-#       opt_para = cv.seasonal(ts - curr_trend,
-#                              window.min=min(s.window),
-#                              window.max=max(s.window),
-#                              window.control=cv.control$increment,
-#                              fold=cv.control$fold)
-# 
-#       opt_deg = opt_para$best_deg
-#       opt_window = opt_para$best_window
-#       curr_season = seasonal(ts - curr_trend, deg=opt_deg, window=opt_window)
-#       prev_trend = curr_trend
-#       prev_season = curr_season
-#     }
-#     else if (i %% 2 == 0) {
-#       t.window = (1.5 * freq) / (1 - 1.5/opt_window)
-#       curr_trend = trend(ts - prev_season, deg=t.deg, window=t.window)
-#       prev_trend = curr_trend
-#     }
-#     else {
-#       opt_para = cv.seasonal(ts - prev_trend,
-#                              window.min=min(s.window),
-#                              window.max=max(s.window),
-#                              window.control=cv.control$increment,
-#                              fold=cv.control$fold)
-#       opt_deg = opt_para$best_deg
-#       opt_window = opt_para$best_window
-#       curr_season = seasonal(ts - prev_trend, deg=opt_deg, window=opt_window)
-#       prev_season = curr_season
-#     }
-#   }
-# 
-#   remainder = ts - curr_season - curr_trend
-#   return (list(component = data.frame(raw=ts, seasonal=curr_season, trend=curr_trend, remainder=remainder),
-#                seasonal.degree = opt_deg,
-#                seasonal.window = opt_window / k,
-#                trend.degree = t.deg,
-#                trend.window = t.window))
-# }
 
-
-
-```
-
-
-
-
-(2) trend -> seasonal -> short term trend
-
-$$X - t_1 - s_1 - st_1 = \varepsilon_1$$
-$$X - s_1 - st_1 = t_2 + \varepsilon_2$$
-$$X - t_2 - st_1 = s_2 + \varepsilon_3$$
-$$X - t_2 - s_2 = st_2 + \varepsilon_4$$
-$$\ldots$$
-$$X - s_{n-1} - st_{n-1} =  t_n + \varepsilon_{3n-4}$$
-$$X - t_n - st_{n-1} = s_n + \varepsilon_{3n-3}$$
-
-
-
-<!-- $$X - t_n - s_n = st_n + \varepsilon_{3n-2}$$ -->
-<!-- ```{r, echo=TRUE} -->
-<!-- # s.window is a vector specifying the window range, i.e. s.window = c(100, 200) -->
-<!-- # if lb = ub, then no cv search will be done, otherwise, do cv search on seasonal span -->
-<!-- decompose.plus = function(ts, s.deg=1, t.deg=1, st.deg=2, s.window=NULL, t.window=NULL, st.window=NULL, iter=3, cv.control = list(increment=NULL, fold=5)) { -->
-<!--   freq = as.integer(tsp(ts)[3]) -->
-<!--   n = length(ts) -->
-<!--   k = ceiling(n/freq) -->
-<!--   true_iter = 3 * iter - 2 -->
-
-
-<!--   if (is.null(st.window)) { -->
-<!--     st.window = 7 -->
-<!--   } -->
-
-<!--   if (is.null(t.window)) { -->
-<!--     t.window = 1.5 * freq -->
-<!--   } -->
-
-
-<!--   # if (is.null(s.window)) { -->
-<!--   #   s.window = n * c(10/sqrt(n), 20/sqrt(n)) -->
-<!--   # } -->
-<!--   if (is.null(s.window)) { -->
-<!--     s.window = k * c(30, 60) -->
-<!--   } else { -->
-<!--     s.window = k * s.window -->
-<!--   } -->
-
-
-<!--   if (is.null(cv.control$increment)) { -->
-<!--     cv.control$increment = (max(s.window) - min(s.window)) / 10 -->
-<!--   } -->
-<!--   opt_deg = s.deg -->
-<!--   opt_window = n -->
-
-
-<!--   prev_season = rep(0, length(ts)) -->
-<!--   prev_trend = rep(0, length(ts)) -->
-<!--   prev_st = rep(0, length(ts)) -->
-
-<!--   for (i in (1:true_iter)) { -->
-<!--     if (i == 1) { -->
-<!--       curr_trend = trend(ts, deg=t.deg, window=t.window) -->
-
-<!--       opt_para = cv.seasonal(ts - curr_trend, -->
-<!--                              window.min=min(s.window), -->
-<!--                              window.max=max(s.window), -->
-<!--                              window.control=cv.control$increment, -->
-<!--                              fold=cv.control$fold) -->
-
-<!--       opt_deg = opt_para$best_deg -->
-<!--       opt_window = opt_para$best_window -->
-<!--       curr_season = seasonal(ts - curr_trend, deg=opt_deg, window=opt_window) -->
-<!--       curr_st = trend(ts - curr_trend - curr_season, deg=st.deg, window=st.window) -->
-<!--       prev_trend = curr_trend -->
-<!--       prev_season = curr_season -->
-<!--       prev_st = curr_st -->
-<!--     } -->
-<!--     else if (i %% 3 == 2) { -->
-<!--       t.window = (1.5 * freq) / (1 - 1.5/opt_window) -->
-<!--       curr_trend = trend(ts - prev_season - prev_st, deg=t.deg, window=t.window) -->
-<!--       prev_trend = curr_trend -->
-<!--     } -->
-<!--     else if (i %% 3 == 0) { -->
-<!--       opt_para = cv.seasonal(ts - prev_trend - prev_st, -->
-<!--                              window.min=min(s.window), -->
-<!--                              window.max=max(s.window), -->
-<!--                              window.control=cv.control$increment, -->
-<!--                              fold=cv.control$fold) -->
-<!--       opt_deg = opt_para$best_deg -->
-<!--       opt_window = opt_para$best_window -->
-<!--       curr_season = seasonal(ts - prev_trend - prev_st, deg=opt_deg, window=opt_window) -->
-<!--       prev_season = curr_season -->
-<!--     } -->
-<!--     else { -->
-<!--       curr_st = trend(ts - prev_trend - prev_season, deg=st.deg, window=st.window) -->
-<!--       prev_st = curr_st -->
-<!--     } -->
-<!--   } -->
-
-<!--   remainder = ts - curr_season - curr_trend - curr_st -->
-<!--   return (list(component = data.frame(raw=ts, seasonal=curr_season, trend=curr_trend, short_trend=curr_st, remainder=remainder), -->
-<!--                seasonal.degree = opt_deg, -->
-<!--                seasonal.window = opt_window / k, -->
-<!--                trend.degree = t.deg, -->
-<!--                trend.window = t.window, -->
-<!--                short.term.trend.degree = st.deg, -->
-<!--                short.term.trend.window = st.window)) -->
-<!-- } -->
-
-<!-- ``` -->
-
-
-
-<!-- ```{R, echo=TRUE} -->
-<!-- convergence.test.cv = function(ts, iter) { -->
-<!--   ds = NULL -->
-<!--   dt = NULL -->
-<!--   dst = NULL -->
-<!--   freq = as.integer(tsp(ts)[3]) -->
-<!--   n = length(ts) -->
-<!--   k = ceiling(n/freq) -->
-
-<!--   true_iter = 3 * iter - 2 -->
-
-<!--   t.deg = 1 -->
-<!--   s.deg = 1 -->
-<!--   st.deg = 2 -->
-
-<!--   st.window = 7 -->
-<!--   t.window = 1.5 * freq -->
-<!--   s.window = n * c(10/sqrt(n), 20/sqrt(n)) -->
-
-<!--   increment = (max(s.window) - min(s.window)) / 10 -->
-
-<!--   opt_deg = s.deg -->
-<!--   opt_window = n * (15 / sqrt(n)) -->
-
-
-<!--   prev_season = rep(0, length(ts)) -->
-<!--   prev_trend = rep(0, length(ts)) -->
-<!--   prev_st = rep(0, length(ts)) -->
-
-<!--   for (i in (1:true_iter)) { -->
-<!--     if (i == 1) { -->
-<!--       curr_trend = trend(ts, deg=t.deg, window=t.window) -->
-
-<!--       opt_para = cv.seasonal(ts - curr_trend, -->
-<!--                              window.min=min(s.window), -->
-<!--                              window.max=max(s.window), -->
-<!--                              window.control=increment, -->
-<!--                              fold=5) -->
-
-<!--       opt_deg = opt_para$best_deg -->
-<!--       opt_window = opt_para$best_window -->
-<!--       curr_season = seasonal(ts - curr_trend, deg=opt_deg, window=opt_window) -->
-<!--       curr_st = trend(ts - curr_trend - curr_season, deg=st.deg, window=st.window) -->
-<!--       ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE)) -->
-<!--       dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE)) -->
-<!--       dst = c(dst, mean((curr_st - prev_st)^2, na.rm=TRUE)) -->
-<!--       prev_trend = curr_trend -->
-<!--       prev_season = curr_season -->
-<!--       prev_st = curr_st -->
-<!--     } -->
-<!--     else if (i %% 3 == 2) { -->
-<!--       t.window = (1.5 * freq) / (1 - 1.5/opt_window) -->
-<!--       curr_trend = trend(ts - prev_season - prev_st, deg=t.deg, window=t.window) -->
-<!--       dt = c(dt, mean((curr_trend - prev_trend)^2, na.rm=TRUE)) -->
-<!--       prev_trend = curr_trend -->
-<!--     } -->
-<!--     else if (i %% 3 == 0) { -->
-<!--       opt_para = cv.seasonal(ts - prev_trend - prev_st, -->
-<!--                              window.min=min(s.window), -->
-<!--                              window.max=max(s.window), -->
-<!--                              window.control=increment, -->
-<!--                              fold=5) -->
-<!--       opt_deg = opt_para$best_deg -->
-<!--       opt_window = opt_para$best_window -->
-<!--       curr_season = seasonal(ts - prev_trend - prev_st, deg=opt_deg, window=opt_window) -->
-<!--       ds = c(ds, mean((curr_season - prev_season)^2, na.rm=TRUE)) -->
-<!--       prev_season = curr_season -->
-<!--     } -->
-<!--     else { -->
-<!--       curr_st = trend(ts - prev_trend - prev_season, deg=st.deg, window=st.window) -->
-<!--       dst = c(dst, mean((curr_st - prev_st)^2, na.rm=TRUE)) -->
-<!--       prev_st = curr_st -->
-<!--     } -->
-<!--   } -->
-
-<!--   return(data.frame(ds, dt, dst)) -->
-<!-- } -->
-
-<!-- ``` -->
-
-
-<!-- ```{r, echo=TRUE} -->
-<!-- interpolate = function(ts, t.window, s.window, t.deg=1, s.deg=2) { -->
-<!--   copy = ts -->
-<!--   na_index = which(is.na(ts)) -->
-<!--   if (length(na_index) == 0) { -->
-<!--     return (ts) -->
-<!--   } -->
-
-<!--   freq = as.integer(tsp(ts)[3]) -->
-<!--   start_year = as.integer(tsp(ts)[1]) -->
-<!--   n = length(ts) -->
-
-<!--   i = 1 -->
-<!--   x = NULL -->
-<!--   trend = NULL -->
-<!--   season = NULL -->
-<!--   while (i <= n) { -->
-<!--     if (!is.na(ts[i])) { -->
-<!--       cursor = i -->
-<!--       while (!is.na(ts[cursor])) { -->
-<!--         x = c(x, cursor) -->
-<!--         cursor = cursor + 1 -->
-<!--       } -->
-<!--       cts_sub = ts.subset(ts, x) -->
-
-<!--       # extract trend on cts_sub -->
-<!--       # extract seasonal on cts_sub -->
-
-<!--       if (length(cts_sub) >= freq) { -->
-<!--         # extract trend on cts_sub -->
-<!--         trend = loess(cts_sub ~ x, span=t.window/n, degree=t.deg, family="symmetric", method="loess", control=loess.control(surface="direct")) -->
-
-<!--         # extract seasonal on cts_sub -->
-<!--         season = seasonal(cts_sub-trend$fitted, deg=s.deg, window=s.window) -->
-
-<!--         # # extract short term trend on cts_sub -->
-<!--         # st = loess(cts_sub-trend$fitted-season ~ x, span=7/length(cts_sub), degree=2, family="symmetric", method="loess", control=loess.control(surface="direct")) -->
-
-<!--       } else { -->
-<!--         # not sure -->
-<!--       } -->
-<!--       i = cursor -->
-<!--     } -->
-<!--     else { -->
-<!--       day = i %% freq -->
-<!--       if (day == 0) { -->
-<!--         day = freq -->
-<!--       } -->
-<!--       period = season[1:freq] -->
-<!--       pred_s = period[day] -->
-<!--       pred_t = as.numeric(predict(object=trend, newdata=data.frame(x=i))) -->
-<!--       # pred_st = as.numeric(predict(object=st, newdata=data.frame(x=i))) -->
-<!--       copy[i] = pred_s + pred_t -->
-<!--       x = c(x, i) -->
-<!--       i = i + 1 -->
-<!--     } -->
-<!--   } -->
-
-<!--   return (copy) -->
-<!-- } -->
-
-<!-- ``` -->
-
-
-<!-- ```{r, echo=TRUE} -->
-<!-- w = 365 -->
-<!-- step = 10 -->
-<!-- # w is the largest window s.t. remainder is stationary -->
-<!-- # or w+step is the smallest window s.t. remainder is non-stationary. -->
-<!-- r = ts -->
-<!-- while (adf.test(r)) { -->
-<!--   t - trend(ts1409, window = w) -->
-<!--   s = seasonal(ts1409 - t, window=30*38) -->
-<!--   r = ts1409 - t - s -->
-<!--   w = w + step -->
-<!-- } -->
-<!-- # report (w-step) -->
-
-<!-- ``` -->
 
 
 ```{r, echo=TRUE}
 variation = function(ts, span) {
   freq = as.integer(tsp(ts)[3])
   n = length(ts)
-  # k = ceiling(n/freq)
-  # s_max = 30*k
-  # s_min = 60*k
-  # increment = (s_max - s_min) / 10
+  k = ceiling(n/freq)
+  s_span_min = 0.1
+  s_span_max = 0.5
+  s_max = s_span_min * n
+  s_min = s_span_max * n
+  increment = (s_max - s_min) / 10
   t = trend(ts,window = n*span)
-  # s_para = cv.seasonal(ts - t,
-  #                        window.min=s_min,
-  #                        window.max=s_max,
-  #                        window.control=increment,
-  #                        fold=5)
-  # s_window = s_para$best_window
-  # s_deg = s_para$best_deg
-  s = seasonal(ts-t, window = 0.15*n)
+  s_para = cv.seasonal(ts - t,
+                         window.min=s_min,
+                         window.max=s_max,
+                         window.control=increment,
+                         fold=5)
+  s_window = s_para$best_window
+  s_deg = s_para$best_deg
+  # s = seasonal(ts-t, window = 0.15*n)
+  s = seasonal(ts-t, deg  = s_deg, window = s_window)
   r = ts - s - t
   return (list(sv = var(s, na.rm=TRUE),
                tv = var(t, na.rm=TRUE),
@@ -1712,27 +696,6 @@ variation = function(ts, span) {
 
 ```
 
-
-
-
-```{r, echo=TRUE, warning=FALSE}
-spans = seq(from=0.01, to=0.1, by=0.01)
-vars = lapply(spans, FUN=function(x) {variation(ts1409, x)})
-sv = sapply(vars, FUN=function(x){x$sv})
-tv = sapply(vars, FUN=function(x){x$tv})
-rv = sapply(vars, FUN=function(x){x$rv})
-# s_spans = sapply(vars, FUN=function(x){x$s.span})
-
-```
-
-```{r, echo=TRUE}
-plot(x = spans, y = sv, type = "b", ylim = c(0, 1), main = "variance", col = "green")
-lines(x = spans, y = tv, type = "b", col = "blue")
-lines(x = spans, y = rv, type = "b", col = "red")
-legend("topright",legend=c("seasonal","trend", "remainder"), lty=1,
-       col=c("green","blue", "red"))
-
-```
 
 
 
@@ -1764,14 +727,6 @@ searchspan = function(ts, span.min, increment) {
 ```
 
 
-
-```{r, echo=TRUE}
-start_time = Sys.time()
-searchspan(ts1409, span.min = 0.01, increment = 0.01)
-end_time = Sys.time()
-end_time - start_time
-
-```
 
 
 
@@ -1854,206 +809,5 @@ decompose = function(ts, s.deg=1, t.deg=1, s.window=NULL, t.window=NULL, iter=3,
 
 ```
 
-
-
-```{r, echo=TRUE}
-# t1 = trend(ts1409, window = 0.07*length(ts1409))
-# s1 = seasonal(ts1409 - t1, deg = 2, window = 57*38)
-# r1 = ts1409 - t1 - s1
-# plot(ts1409, type = "l", col="green", ylim=c(-5,5), main="span = 0.07")
-# lines(t1, col = "blue")
-# lines(s1, col = "red")
-start_time = Sys.time()
-d1409 = decompose(ts1409, iter=3)
-end_time = Sys.time()
-end_time - start_time
-
-```
-
-```{r, echo=TRUE}
-plot(ts1409, type="l", col="green", ylim=c(-5,5), main="1409 trend compare")
-lines(d1409$component$trend + d1409$component$seasonal, col="blue")
-# lines(ts(stlp1409$data[,"trend"], start =c(1980,1), frequency = 365) , col="red")
-# lines(d$component$trend, col="blue")
-# lines(d$component$seasonal, col="purple")
-# lines(ts(stlp1409$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
-# legend("topright",legend=c("ts","loess trend", "loess seasonal", "stl_plus trend"), lty=1,
-#        col=c("green","red", "purple", "blue"))
-
-
-
-
-
-
-# seasonal compare
-plot(ts1409, type="b", col="green", xlim=c(1989,1990), main="1409 seasonal compare")
-lines(d1409$component$seasonal+ d1409$component$trend, col="red")
-lines(ts(stlp1409$data[,"seasonal"]+stlp1409$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
-legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
-       col=c("green","red", "blue"))
-
-```
-
-
-# 1349
-```{r, echo=TRUE}
-# t1 = trend(ts1409, window = 0.07*length(ts1409))
-# s1 = seasonal(ts1409 - t1, deg = 2, window = 57*38)
-# r1 = ts1409 - t1 - s1
-# plot(ts1409, type = "l", col="green", ylim=c(-5,5), main="span = 0.07")
-# lines(t1, col = "blue")
-# lines(s1, col = "red")
-start_time = Sys.time()
-d1349= decompose(ts1349, iter=3)
-end_time = Sys.time()
-end_time - start_time
-
-```
-
-
-```{r, echo=TRUE}
-plot(ts1349, type="l", col="green", ylim=c(-5,5), main="1349")
-lines(d1349$component$trend + d1349$component$seasonal, col="red")
-# # lines(ts(stlp1409$data[,"trend"], start =c(1980,1), frequency = 365) , col="red")
-# lines(d1349$component$trend, col="red")
-# lines(d$component$seasonal, col="purple")
-# lines(ts(stlp1349$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
-# legend("topright",legend=c("ts","loess trend", "loess seasonal", "stl_plus trend"), lty=1,
-#        col=c("green","red", "purple", "blue"))
-
-
-
-
-
-
-# seasonal compare
-plot(ts1349, type="b", col="green", xlim=c(2000,2005), main="1349 s+t")
-lines(d1349$component$seasonal+ d1349$component$trend, col="red")
-lines(ts(stlp1349$data[,"seasonal"]+stlp1349$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
-legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
-       col=c("green","red", "blue"))
-
-```
-
-
-```{r, echo=TRUE, warning=FALSE}
-spans = seq(from=0.01, to=0.1, by=0.01)
-vars = lapply(spans, FUN=function(x) {variation(ts1349, x)})
-sv = sapply(vars, FUN=function(x){x$sv})
-tv = sapply(vars, FUN=function(x){x$tv})
-rv = sapply(vars, FUN=function(x){x$rv})
-# s_spans = sapply(vars, FUN=function(x){x$s.span})
-
-```
-
-```{r, echo=TRUE}
-plot(x = spans, y = sv, type = "b", ylim = c(0, 2), main = "variation", col = "green")
-lines(x = spans, y = tv, type = "b", col = "blue")
-lines(x = spans, y = rv, type = "b", col = "red")
-legend("topright",legend=c("seasonal","trend", "remainder"), lty=1,
-       col=c("green","blue", "red"))
-
-```
-
-
-
-
-
-# 1369
-```{r, echo=TRUE}
-# t1 = trend(ts1409, window = 0.07*length(ts1409))
-# s1 = seasonal(ts1409 - t1, deg = 2, window = 57*38)
-# r1 = ts1409 - t1 - s1
-# plot(ts1409, type = "l", col="green", ylim=c(-5,5), main="span = 0.07")
-# lines(t1, col = "blue")
-# lines(s1, col = "red")
-start_time = Sys.time()
-d1369= decompose(ts1369, iter=3)
-end_time = Sys.time()
-end_time - start_time
-
-```
-
-
-```{r, echo=TRUE}
-plot(ts1369, type="l", col="green", ylim=c(-5,5), main="1369")
-# lines(d1369$component$trend + d1369$component$seasonal, col="blue")
-# lines(ts(stlp1409$data[,"trend"], start =c(1980,1), frequency = 365) , col="red")
-lines(d1369$component$trend, col="red")
-# lines(d$component$seasonal, col="purple")
-lines(ts(stlp1369$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
-# legend("topright",legend=c("ts","loess trend", "loess seasonal", "stl_plus trend"), lty=1,
-#        col=c("green","red", "purple", "blue"))
-
-
-
-
-
-
-# seasonal compare
-plot(ts1369, type="b", col="green", xlim=c(1980,1983), main="1349 s+t")
-lines(d1369$component$seasonal+ d1369$component$trend, col="red")
-lines(ts(stlp1369$data[,"seasonal"]+stlp1369$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
-legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
-       col=c("green","red", "blue"))
-
-```
-
-
-```{r, echo=TRUE, warning=FALSE}
-spans = seq(from=0.01, to=0.1, by=0.01)
-vars = lapply(spans, FUN=function(x) {variation(ts1369, x)})
-sv = sapply(vars, FUN=function(x){x$sv})
-tv = sapply(vars, FUN=function(x){x$tv})
-rv = sapply(vars, FUN=function(x){x$rv})
-# s_spans = sapply(vars, FUN=function(x){x$s.span})
-
-```
-
-```{r, echo=TRUE}
-plot(x = spans, y = sv, type = "b", ylim = c(0, 2), main = "variation", col = "green")
-lines(x = spans, y = tv, type = "b", col = "blue")
-lines(x = spans, y = rv, type = "b", col = "red")
-legend("topright",legend=c("seasonal","trend", "remainder"), lty=1,
-       col=c("green","blue", "red"))
-
-```
-
-
-
-
-
-
-
-
-#simulation
-```{r, echo=TRUE}
-t = c(1 : 100)
-w = (2*pi)/10
-sea = 5*sin(w*t)
-tr = 0.0001 * (t - 20)* (t - 50)* (t - 100)
-# err = rt(length(t)) #any fat tail distr and picking one side tail
-err = rnorm(length(t))
-# corr = arima.sim(list(order = c(), ar = 0.5, ma = 0.3), n = length(t))
-Xt = sea + tr + err
-Xt = ts(Xt, start=c(2022,1), frequency = 10)
-
-```
-
-```{r, echo=TRUE, warning=FALSE}
-d = decompose(Xt, s.window = c(1,20), t.window = 40, iter =3)
-dstlp = stlplus::stlplus(Xt, n.p=10, s.window="periodic", inner=2, outer=10)
-```
-
-
-```{r, echo=TRUE}
-plot(Xt, col="grey")
-# lines(ts(tr, start =c(2022,1), frequency = 10), col = "green")
-# lines(trend(Xt, window = 40), col = "red")
-lines(ts(dstlp$data[,"seasonal"], start =c(2022,1), frequency = 10), type = "b", col = "blue")
-lines(seasonal(Xt - trend(Xt, window = 40), window = 15), type = "b", col = "red")
-lines(ts(sea, start =c(2022,1), frequency = 10), type = "b", col="green")
-
-```
 
 

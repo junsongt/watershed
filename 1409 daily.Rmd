@@ -9,7 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(knitr)
 library(tidyverse)
-library(tseries)
 library(stlplus)
 ```
 
@@ -40,20 +39,18 @@ pacf(ts1409, lag.max = 365*5, main = "pacf of daily respoonse", na.action = na.p
 ```
 
 
-# p = TSA::periodogram(window(ts1409, start=c(1980, 1), end=c(1996,12)), xlim = c(0,0.01))
-# d = data.frame(freq=p$freq, spec=p$spec)
-# order = d[order(-d$spec),]
-# top5 = head(order, 5)
-# 1/top5$freq
+<!-- # p = TSA::periodogram(window(ts1409, start=c(1980, 1), end=c(1996,12)), xlim = c(0,0.01)) -->
+<!-- # d = data.frame(freq=p$freq, spec=p$spec) -->
+<!-- # order = d[order(-d$spec),] -->
+<!-- # top5 = head(order, 5) -->
+<!-- # 1/top5$freq -->
 
-```{r, echo=TRUE}
-spec1409 = spectrum(ts1409, na.action=na.exclude, xlim = c(0,0.02), ylim=c(10, 10000), type = "h")
-spec_chart1409 = data.frame(period=1/spec1409$freq, frequency=spec1409$freq, spectrum=spec1409$spec)
-head(spec_chart1409[order(spec_chart1409$spectrum, decreasing=TRUE),], 10)
+<!-- ```{r, echo=TRUE} -->
+<!-- spec1409 = spectrum(ts1409, na.action=na.exclude, xlim = c(0,0.02), ylim=c(10, 10000), type = "h") -->
+<!-- spec_chart1409 = data.frame(period=1/spec1409$freq, frequency=spec1409$freq, spectrum=spec1409$spec) -->
+<!-- head(spec_chart1409[order(spec_chart1409$spectrum, decreasing=TRUE),], 10) -->
 
-```
-
-
+<!-- ``` -->
 
 
 
@@ -62,28 +59,6 @@ head(spec_chart1409[order(spec_chart1409$spectrum, decreasing=TRUE),], 10)
 
 
 
-# CV on seasonal
-```{r, echo=TRUE}
-start_time = Sys.time()
-cv.seasonal(ts1409, d.max=2, fold=5)
-end_time = Sys.time()
-end_time - start_time
-
-```
-Comment:
-$$span \in [\frac{10}{\sqrt{n}}, \frac{20}{\sqrt{n}}] \Rightarrow span = \frac{15}{\sqrt{n}}]$$
-
-
-
-# CV on trend
-
-Comment: 
-$$span \in [\frac{0.5}{\sqrt{n}}, \frac{1}{\sqrt{n}}] \Rightarrow span = \frac{0.5}{\sqrt{n}}$$
-
-Comment:
-$$span \in [\frac{0.1}{\sqrt{n}}, \frac{1}{\sqrt{n}}] \Rightarrow span = \frac{0.1}{\sqrt{n}}$$
-
-Comment: the smaller the span on trend, the higher the degree, the better
 
 
 
@@ -118,10 +93,47 @@ plot(stlp1409)
 
 ```{r, echo=TRUE, warning=FALSE}
 start_time = Sys.time()
-decomp1409 = decompose.plus(ts1409)
+decomp1409 = decompose.plus(ts1409, iter=3)
 end_time = Sys.time()
 end_time - start_time
 ```
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+t = trend.ma(ts1409)
+end_time = Sys.time()
+end_time - start_time
+
+```
+```{r, echo=TRUE}
+start_time = Sys.time()
+t0 = stats::filter(ts1409, rep(1,365), method=c("convolution"), sides=2, circular=TRUE) / 365
+end_time = Sys.time()
+end_time - start_time
+
+
+```
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+t_loess = trend(ts1409, deg=1, window=548, impute = TRUE)
+end_time = Sys.time()
+end_time - start_time
+
+```
+
+
+
+```{r, echo=TRUE}
+start_time = Sys.time()
+decomp1409copy = decompose.plus(ts1409copy, iter=3)
+end_time = Sys.time()
+end_time - start_time
+
+```
+
 
 
 
@@ -129,23 +141,49 @@ end_time - start_time
 # trend compare
 plot(ts1409, type="l", col="green", ylim=c(-5,5), main="1409 trend compare")
 lines(decomp1409$component$trend, col="red")
-lines(ts(stlp1409$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
-legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
-       col=c("green","red", "blue"))
+# lines(ts(stlp1409$data[,"trend"], start =c(1980,1), frequency = 365), col="blue")
+# lines(t0, col="brown")
+lines(t, col="orange")
+# lines(t_loess,col="red")
+# legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
+#        col=c("green","red", "gray"))
+
+
+plot(ts1409, type="l", col="green", ylim=c(-5,5), main="1409 trend compare")
+lines(decomp1409$component$trend, col="red")
+lines(decomp1409copy$component$trend, col="blue")
+lines(ts(stlp1409$data[,"trend"], start =c(1980,1), frequency = 365), col="gray")
+
+
+
 
 
 # seasonal compare
-plot(ts1409, type="l", col="green", xlim=c(1980,1982), main="1409 seasonal compare")
+plot(ts1409, type="l", col="green", xlim=c(1997,2000), main="1409 seasonal compare")
 lines(decomp1409$component$seasonal, col="red")
 lines(ts(stlp1409$data[,"seasonal"], start =c(1980,1), frequency = 365), col="blue")
 legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
        col=c("green","red", "blue"))
 
 
+
+plot(ts1409, type="b", col="green", xlim=c(1997,2000), main="1409 seasonal compare")
+lines(ts1409copy, type="b", col="gray")
+lines(decomp1409$component$trend, col="red")
+lines(decomp1409copy$component$trend, col="blue")
+lines(decomp1409$component$seasonal, col="brown")
+# lines(ts(stlp1409$data[,"seasonal"], start =c(1980,1), frequency = 365), col="blue")
+
+
+
+
+
+
+
 # remainder compare
 plot(ts1409, type="l", col="cyan", ylim=c(-5,5), main="1409 remainder compare")
 lines(decomp1409$component$remainder, col="red")
-# lines(ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365), col="blue")
+lines(ts(stlp1409$data[,"remainder"], start =c(1980,1), frequency = 365), col="blue")
 legend("topright",legend=c("ts","loess", "stl_plus"), lty=1,
        col=c("cyan","red", "blue"))
 

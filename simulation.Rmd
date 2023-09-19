@@ -10,62 +10,670 @@ knitr::opts_chunk$set(echo = TRUE)
 library(knitr)
 library(tidyverse)
 library(tseries)
+library(stlplus)
+library(forecast)
+stlp1409 = stlplus(ts1409, n.p=365, s.window="periodic", inner=2, outer=10)
 ```
 
 
-#simulation
-```{r, echo=TRUE}
-# period = 10
-# 10 periods
-t = c(1 : 100)
-w = (2*pi)/10
-sea = 5*sin(w*t)
-tr = 0.0001 * (t - 20)* (t - 50)* (t - 100)
-# err = rt(length(t), df = 5) #any fat tail distr and picking one side tail
-err = rnorm(length(t))
-# corr = arima.sim(list(order = c(), ar = 0.5, ma = 0.3), n = length(t))
-Xt = sea + tr + err
-Xt = ts(Xt, start=c(2022,1), frequency = 10)
-
-```
-
-```{r, echo=TRUE, warning=FALSE}
-# d = decompose(Xt, s.window = c(1,20), t.window = 40, iter =3)
-dstlp = stlplus::stlplus(Xt, n.p=10, s.window="periodic", inner=2, outer=10)
-
-# t = trend(Xt, window = 95)
-# s = seasonal(Xt - t, window = 30)
-# t_ma = trend.ma(Xt)
-```
-
-
-```{r, echo=TRUE}
-best_tw = function(tr) {
-  min_MSE = Inf
-  best_w = 10
-  for (w in seq(from=10, to=100, by=1)) {
-    t = trend(Xt, window = w)
-    MSE = mean(sqrt((t - tr)^2))
-    if (MSE < min_MSE) {
-      min_MSE = MSE
-      best_w = w
-      
-    }
-    
+# tool functionalities...
+```{r}
+mse = function(X, Y) {
+  if (length(X) != length(Y)) {
+    print("lengths differ!")
+    return ()
   }
-  
-  return (best_w)
+  else {
+    return (mean((X - Y)^2, na.rm = TRUE))
+  }
 }
 
 
+
+# n order difference in vector/time series
+difference = function(X, order) {
+  if (order == 1) {
+    result = NULL
+    n = length(X)
+    for (i in (2 : n)) {
+      result = c(result, (X[i]-X[i-1]))
+    }
+    return (result)
+  }
+  else {
+    result = difference(X,1)
+    return (difference(result, (order-1)))
+  }
+}
+
+
+ma = function(Xt, window) {
+  n = length(Xt)
+  # window >= 2
+  if (window %% 2 == 0 & window > 0) {
+    window = window - 1
+  }
+  r = (window - 1) / 2
+  Yt = NULL
+
+  
+  for (i in (1 : n)) {
+    if (i <= r || i > (n-r)) {
+      avg = NA
+    }
+    else {
+      avg = mean(Xt[(i-r) : (i+r)])
+    }
+    Yt = c(Yt, avg)
+  }
+  
+  return (Yt)
+}
+
+monotone = function(X) {
+  n = length(X)
+  if (n == 1) {
+    monotone = TRUE
+  }
+  else {
+    i = 2
+    monotone = X[i] <= X[i-1]
+    while (i <= n && monotone) {
+      i = i + 1
+      if (i <= n) {
+        monotone = X[i] <= X[i-1]
+      }
+      else {
+        monotone = TRUE
+      }
+      
+    }
+  }
+  return (monotone)
+
+}
+
+
+
+partialsums = function(X) {
+  n = length(X)
+  sum = 0
+  par_sums = NULL
+  for (i in (1:n)) {
+    curr = sum + X[i]
+    par_sums = c(par_sums, curr)
+    sum = sum + X[i]
+  }
+  return (par_sums)
+}
+
 ```
 
 
 
-```{r, echo=TRUE, warning=FALSE}
-t = trend(Xt, window = best_tw(tr))
-res = cv.seasonal(Xt - t, window.min=10, window.max=50)
-s = seasonal(Xt - t, deg=res$best_deg, window=res$best_window)
+#simulation
+
+<!-- #==================================================================================== -->
+<!-- # sparse data -->
+<!-- ```{r, echo=TRUE} -->
+<!-- # period = 10 -->
+<!-- # 10 periods -->
+<!-- t = c(1 : 100) -->
+<!-- w = (2*pi)/10 -->
+<!-- sea = 5*sin(w*t) -->
+<!-- tr = 0.0001 * (t - 20)* (t - 50)* (t - 100) -->
+<!-- # err = rt(length(t), df = 5) #any fat tail distr and picking one side tail -->
+<!-- err = rnorm(length(t)) -->
+<!-- # corr = arima.sim(list(order = c(), ar = 0.5, ma = 0.3), n = length(t)) -->
+<!-- Xt = sea + tr + err -->
+<!-- Xt = ts(Xt, start=c(2022,1), frequency = 10) -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r, echo=TRUE, warning=FALSE} -->
+<!-- # d = decompose(Xt, s.window = c(1,20), t.window = 40, iter =3) -->
+<!-- dstlp = stlplus::stlplus(Xt, n.p=10, s.window="periodic", inner=2, outer=10) -->
+
+<!-- # t = trend(Xt, window = 95) -->
+<!-- # s = seasonal(Xt - t, window = 30) -->
+<!-- # t_ma = trend.ma(Xt) -->
+<!-- ``` -->
+
+
+<!-- ```{r, echo=TRUE} -->
+<!-- best_tw = function(tr) { -->
+<!--   min_MSE = Inf -->
+<!--   best_w = 10 -->
+<!--   for (w in seq(from=10, to=100, by=1)) { -->
+<!--     t = trend(Xt, window = w) -->
+<!--     MSE = mean(sqrt((t - tr)^2)) -->
+<!--     if (MSE < min_MSE) { -->
+<!--       min_MSE = MSE -->
+<!--       best_w = w -->
+
+<!--     } -->
+
+<!--   } -->
+
+<!--   return (best_w) -->
+<!-- } -->
+
+
+<!-- ``` -->
+
+
+
+<!-- ```{r, echo=TRUE, warning=FALSE} -->
+<!-- t = trend(Xt, window = best_tw(tr)) -->
+<!-- res = cv.seasonal(Xt - t, window.min=10, window.max=50) -->
+<!-- s = seasonal(Xt - t, deg=res$best_deg, window=res$best_window) -->
+
+
+<!-- ``` -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#==================================================================================
+# rich data
+
+# setup
+```{r, echo = TRUE}
+ndays <- 365; nyears <- 10; start_time <- c(2012,1)
+n <- ndays * nyears
+t <- 1 : (n)
+w <- (2*pi)/ndays 
+
+
+sea <- 5*sin(w*t) #seasonal
+
+# heavy trend
+tr <- 0.1*(t/ndays - 1)* (t/ndays- 6)* (t/ndays - 10)
+
+# flat trend
+
+tr2 = stlp1409$data[,"trend"][1:3650]
+
+
+# # linear trend
+# tr3 = 0.001 * t + 1
+
+```
+
+
+# errors
+```{r, echo=TRUE}
+c = 1
+
+
+# White noise
+# err = c * rnorm(length(t))
+
+
+
+# ARMA error
+err = c * arima.sim(n=ndays*nyears, list(ar = c(0.5), ma = c(1, 0.5)))
+
+
+# AR error
+# err = c * arima.sim(n=ndays*nyears, list(ar = c(0.8, -0.5)))
+
+
+# MA error
+# err = c * arima.sim(n=ndays*nyears, list(ma = c(1, 0.5)))
+```
+
+
+
+
+# adding outliers
+```{r, echo=TRUE}
+# adding outliers
+set.seed(12)
+prop = 0.01
+idx <- sample(n, round(prop*n))
+
+
+# with mean = 30 , sd = 2
+# Xt[idx] <- rnorm(length(idx), 30, 2)
+# 
+# with mean = 0 , sd = 20
+# Xt[idx] <- rnorm(length(idx), 0, 10)
+
+# err[idx] <- rnorm(length(idx), 30, 2)
+
+err[idx] <- rnorm(length(idx), 0, 3)
+
+# Xt <- ts(Xt, start=start_time , frequency = ndays)
+# plot(Xt, type = "p")
+
+
+#tmp <- rbinom(length(idx), 1,0.5)
+#Xt[idx] <- tmp*rnorm(length(idx), 25, 2) + (1-tmp)*rnorm(length(idx), -25, 2)
+
+```
+
+
+
+
+
+
+# forming Xt(ts) (later try different seeds for at least 50 times!!)
+```{r}
+Xt = tr + err
+
+
+Xt <- ts(Xt, start=start_time , frequency = ndays)
+plot(Xt, col = "grey", type = "b", main = "Xt")
+lines(ts(tr, start =start_time, frequency = ndays), col = "red")
+legend("topright",legend=c("true trend"), lty=1,
+       col=c("red"))
+
+
+```
+
+
+
+
+
+
+
+```{r}
+Yt = ts(c(Xt[1], difference(Xt, order = 1)), start=start_time , frequency = ndays)
+acf_Y = acf(Yt, lag.max = n)
+acf_S = acf(difference(err, order = 1), lag.max = n)
+
+
+```
+
+
+```{r}
+for (span in seq(from = 1, to = 0.1, by = -0.1)) {
+
+  t_i = trend(Yt, deg = 2, window = span * n)
+  r_i = Yt - t_i
+  
+  
+  dt = ts(c(tr[1], difference(tr, order=1)), start=start_time , frequency = ndays)
+    
+  par(mfrow=c(1,1))
+  # raw
+  plot(Yt, type = "p", col="grey", main = paste0("span = ", span))
+  
+  # fit
+  lines(t_i, lwd = 2, type = "l", col = "blue")
+  # true trend & seasonal
+  lines(ts(difference(tr, order=1), start =start_time, frequency = ndays), lwd = 2, type = "l", col="red")
+  legend("topright",legend=c("trend fit", "true trend"), lty=1,
+       col=c("blue", "red"))
+  print(mse(t_i, dt))
+}
+
+
+
+```
+
+
+
+
+
+```{r}
+tt = trend(Yt, deg = 1, window = 1 * n)
+plot(tt, type = "b", col = "red", ylim = c(-0.1, 0.1))
+lines(dt, type = "b", col = "blue")
+fit_tr = ts(partialsums(tt), start=start_time , frequency = ndays)
+plot(fit_tr, type = "b", col = "red")
+lines(ts(tr, start =start_time, frequency = ndays), type = "b", col = "blue")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+acf_R = acf(err, lag.max = n)
+sum(abs(as.vector(acf_Y$acf)) <= (1.96/sqrt(n))) / length(as.vector(acf_Y$acf))
+sum(abs(as.vector(acf_R$acf)) <= (1.96/sqrt(n))) / length(as.vector(acf_R$acf))
+
+# for (span in seq(from = 1, to = 0.1, by = -0.1)) {
+#   t_i = trend(Xt, deg = 2, window = span * n)
+#   r_i = Xt - t_i
+#   acf_r = acf(r_i, lag.max = n, plot = FALSE)
+#   # m = length(acf_r$acf)
+#   within = abs(acf_r$acf[(l+1):n]) <= (1.96/sqrt(n))
+#   prop = sum(within) / length(within[(l+1):n])
+# 
+#   if (prop >= max_prop) {
+#     best_span = span
+#     max_prop = prop
+#   }
+# }
+# max_prop
+# best_span
+
+
+```
+
+<!-- #stl-plus result -->
+<!-- ```{r, echo=TRUE} -->
+<!-- ## stl_plus -->
+<!-- res_stl_plus <- stlplus::stlplus(Xt, n.p=ndays, s.window="periodic", inner=2, outer=10) -->
+
+<!-- ## stl does not work "series is not periodic or has less than two periods"; check frequency first ...  -->
+<!-- res_stl <- stl(Xt,  s.window="per", inner=2, outer=10) -->
+
+<!-- ## check results:  -->
+<!-- plot(Xt, type = "p", col="grey") -->
+
+
+<!-- # lines(ts(res_stl_plus$data[,"seasonal"], start =start_time , frequency = ndays), lwd = 2, type = "l", col = "blue") -->
+<!-- lines(ts(res_stl_plus$data[,"trend"], start = start_time , frequency = ndays), lwd = 2, type = "l", col = "blue") -->
+
+
+<!-- # true trend & seasonal -->
+<!-- # lines(ts(sea, start =start_time, frequency = ndays), lwd = 2, type = "l", col="red") -->
+<!-- lines(ts(tr2, start =start_time, frequency = ndays), lwd = 2, type = "l", col="red") -->
+
+
+<!-- legend("topright",legend=c("trend fitted", "true trend"), lty=1, -->
+<!--        col=c("blue", "red")) -->
+<!-- ``` -->
+
+
+
+
+
+
+
+#acf of simulated data
+```{r}
+acf_X = acf(Xt, lag.max = 100, main = "acf of trend + remainder")
+acf_R = acf(err, lag.max = 100, main = "acf of true remainder")
+# acf_T = acf(tr2, lag.max = 3650, main = "acf of true trend")
+
+acov_X = acf(Xt, type = "covariance",  lag.max = n, main = "acf of trend + remainder")
+acov_R = acf(err, type = "covariance", lag.max = n, main = "acf of true remainder")
+
+acf = as.vector(acf_X$acf)
+
+# plot(log(acf_R$acf - min(acf_R$acf)), type = "b", col = "red")
+# lines(log(acf_X$acf), type = "b", col = "blue")
+
+
+# plot(acov_X$acf - 7, type = "b", col = "blue")
+# lines(acov_R$acf, type = "b", col = "red")
+
+plot(difference(as.vector(acov_R$acf), order = 1)[1:100], type = "b", col = "blue")
+lines(difference(as.vector(acov_X$acf), order = 1)[1:100], type = "b", col = "red")
+
+
+plot(abs(difference(as.vector(acf_R$acf), order = 1))[1:50], type = "b", col = "blue")
+lines(abs(difference(as.vector(acf_X$acf), order = 1))[1:50], type = "b", col = "black")
+lines(y=rep(2*1.96/sqrt(n), 1000), x=c(1:1000), col = "red")
+lines(y=rep(1.96/sqrt(n), 1000), x=c(1:1000), col = "red")
+legend("topright",legend=c("error", "Xt"), lty=1,
+       col=c("blue", "black"))
+```
+
+
+
+
+<!-- ```{r} -->
+<!-- acf_1409 = acf(ts1409-seasonal(ts1409, window = 60 * 38), na.action = na.exclude, lag.max = 100) -->
+
+<!-- acov_1409 = acf(ts1409-seasonal(ts1409, window = 60 * 38), type = "covariance", na.action = na.exclude, lag.max = 100) -->
+
+<!-- ``` -->
+
+
+# method 1
+determine the critical lag: $$\hat{h}$$ such that $$\rho(\hat{h}+1) > \rho(\hat{h})$$, then $$\forall h \geq \hat{h}$$, calculate # (acf < bound) / (n - h) when searching span, stop at the span when this proportion is maximized. Also, we want the MSE of fitted the trend to be as small as possible.
+
+
+
+```{r}
+l = 1
+
+while (acf[l+1] <= acf[l] || abs(difference(acf, order=1))[l] >= (2*1.96/sqrt(n))) {
+  l = l + 1
+}
+
+l
+
+```
+
+
+<!-- ```{r} -->
+<!-- span = 0.2 -->
+<!-- t_i = trend(Xt, deg = 2, window = span * n) -->
+<!-- r_i = Xt - t_i -->
+<!-- acf_r = acf(r_i, lag.max = n, plot = FALSE) -->
+<!-- # m = length(acf_r$acf) -->
+<!-- within = abs(acf_r$acf[(l+1):n]) <= (1.96/sqrt(n)) -->
+<!-- sum(within) / length(within[(l+1):n]) -->
+<!-- plot(acf_r) -->
+<!-- # while (span >= 0.2 && sum(within) / length(within) < 0.95 ) { -->
+<!-- #   span = span - 0.1 -->
+<!-- #   t_i = trend(Xt, deg = 2, window = span * n) -->
+<!-- #   r_i = Xt - t_i -->
+<!-- #   acf_r = acf(r_i, lag.max = n, plot = FALSE) -->
+<!-- #   m = length(acf_r$acf) -->
+<!-- #   within = abs(acf_r$acf[(l+1):m]) <= (1.96/sqrt(n)) -->
+<!-- # } -->
+
+<!-- #maximize the proportion of #(acf<bound) / #acf -->
+
+
+<!-- ``` -->
+
+
+
+```{r}
+# max_prop = 0
+best_span = 1
+min_d = Inf
+
+for (span in seq(from = 1, to = 0.1, by = -0.1)) {
+  t_i = trend(Xt, deg = 2, window = span * n)
+  r_i = Xt - t_i
+  acf_r = acf(r_i, lag.max = n, plot = FALSE)
+  # m = length(acf_r$acf)
+  ref_prop = sum(abs(as.vector(acf_Y$acf)) <= (1.96/sqrt(n))) / length(as.vector(acf_Y$acf))
+  prop = sum(abs(as.vector(acf_r$acf)) <= (1.96/sqrt(n))) / length(as.vector(acf_r$acf))
+  # within = abs(acf_r$acf[(l+1):n]) <= (1.96/sqrt(n))
+  # prop = sum(within) / length(within[(l+1):n])
+  d = abs(prop - ref_prop)
+  print(d)
+
+  if (d <= min_d) {
+    best_span = span
+    min_d = d
+  }
+  
+
+  # if (prop >= max_prop) {
+  #   best_span = span
+  #   max_prop = prop
+  # }
+}
+
+best_span
+
+
+```
+
+
+# method 2
+Assume $$X_t = m_t + Y_t$$
+# acov(Xt) and acov(Yt) has constant shift at small lag h compared to large n, 
+
+```{r}
+plot(as.vector(acov_X$acf)[1:100], type = "h", col = "blue", ylim = c(-1,10))
+lines(as.vector(acov_R$acf)[1:100], type = "h", col = "red")
+
+
+
+```
+
+
+
+```{r}
+min_v = Inf
+best_span = 1
+
+for (span in seq(from = 1, to = 0.1, by = -0.1)) {
+  t_i = trend(Xt, deg = 2, window = span * n)
+  r_i = Xt - t_i
+  acov_r = acf(r_i, type = "covariance", lag.max = n, plot = FALSE)
+  acf_r = acf(r_i, lag.max = n, plot = FALSE)
+  D = difference(as.vector(acov_X$acf)[1:(l+1)], order=1)
+  d = difference(as.vector(acov_r$acf)[1:(l+1)], order=1)
+  # if (v <= min_v) {
+  #   best_span = span
+  #   min_v = v
+  # }
+  plot(as.vector(acov_X$acf)[1:100], type = "h", col = "blue", ylim = c(-1,10))
+  lines(as.vector(acov_r$acf)[1:100], type = "h", col = "red")
+  print(abs(d))
+}
+# min_v
+# best_span
+
+```
+
+# method 3
+# find new critical lag: h such that we encounter second time for the increase in acf after the second monotone decrease in acf
+
+```{r}
+acf(difference(Xt, order=1), type = "covariance")
+plot(acov_R$acf[1:100], type = "h")
+```
+
+
+
+
+#cheat check
+```{r}
+shift = var(tr)
+plot(as.vector(acov_X$acf)[1:100] - shift, type = "b", col = "red")
+lines(as.vector(acov_R$acf)[1:100], type = "b", col = "blue")
+
+```
+
+
+
+
+# different span result comparison
+```{r}
+# for (span in seq(from = 1, to = 0.1, by = -0.1)) {
+#   init_season = rough.season(Xt)
+#   offset = mean(init_season)
+#   init_season = init_season - offset
+#   t_i = trend(Xt-init_season, deg = 2, window = span * n)
+#   opt = cv.seasonal(Xt - t_i, span.min = 0.01, span.max = 0.2)
+#   s_i = seasonal(Xt - t_i, deg = opt$best_deg, window = opt$best_span * length(Xt))
+#   r_i = Xt - t_i - s_i
+#   par(mfrow=c(1,1))
+#   # raw
+#   plot(Xt, type = "p", col="grey")
+#   
+#   # fit
+#   lines(t_i, lwd = 2, type = "l", col = "blue")
+#   lines(s_i, lwd = 2, type = "l", col = "blue")
+#   
+#   # true trend & seasonal
+#   lines(ts(sea, start =start_time, frequency = ndays), lwd = 2, type = "l", col="red")
+#   lines(ts(tr, start =start_time, frequency = ndays), lwd = 2, type = "l", col="red")
+#   
+#   # spec = spectrum(Xt - s_i, na.action=na.exclude)
+#   # spec_chart = data.frame(period=1/t_i$freq, frequency=t_i$freq, spectrum=t_i$spec)
+#   # head(spec_chart[order(spec_chart$spectrum, decreasing=TRUE),], 10)
+#   par(mfrow = c(2,1))
+#   plot(t_i)
+#   plot(r_i)
+#   
+# }
+
+# plot(as.vector(acf_Y$acf - acf_S$acf), type = "b")
+
+# no seasonal
+for (span in seq(from = 1, to = 0.1, by = -0.1)) {
+
+  t_i = trend(Xt, deg = 2, window = span * n)
+  r_i = Xt - t_i
+  
+  dr_i = difference(r_i, order = 1)
+  
+  acf_s = acf(dr_i, lag.max=n, plot = FALSE)
+  
+    
+  par(mfrow=c(1,1))
+  # raw
+  plot(Xt, type = "p", col="grey", main = paste0("span = ", span))
+  
+  # fit
+  lines(t_i, lwd = 2, type = "l", col = "blue")
+  # true trend & seasonal
+  lines(ts(tr, start =start_time, frequency = ndays), lwd = 2, type = "l", col="red")
+  legend("topright",legend=c("trend fit", "true trend"), lty=1,
+       col=c("blue", "red"))
+  # spec = spectrum(Xt - s_i, na.action=na.exclude)
+  # spec_chart = data.frame(period=1/t_i$freq, frequency=t_i$freq, spectrum=t_i$spec)
+  # head(spec_chart[order(spec_chart$spectrum, decreasing=TRUE),], 10)
+  
+  # par(mfrow = c(2,1))
+  # plot(t_i)
+  # plot(r_i)
+  
+  # plot(as.vector(acf_Y$acf - acf_s$acf), type = "b")
+  
+  # par(mfrow = c(1,2))
+  # acf(dr_i,lag.max = 20, ylim = c(-1, 2))
+  # acf(Yt, lag.max = 20, ylim = c(-1, 2))
+  
+  # print(monotone(as.vector(acf(t_i, lag.max = 50, plot=FALSE)$acf)))
+  # print(sum((as.vector(acf_Y$acf) - as.vector(acf_s$acf))^2))
+  
+  # d_r = abs(difference(as.vector(acf_r$acf), order = 1))
+  # d_R = abs(difference(as.vector(acf_R$acf), order = 1))
+  # par(mfrow=c(1,1))
+  # plot(d_r, type = "b", col = "blue",ylim = c(0,1))
+  # lines(d_R, type = "b", col = "red")
+  # legend("topright",legend=c("fitted error", "true error"), lty=1,
+  #      col=c("blue", "red"))
+  
+  
+}
 
 
 ```
@@ -81,44 +689,304 @@ lines(ts(dstlp$data[,"trend"], start =c(2022,1), frequency = 10), type = "l", co
 lines(s, type = "l", col = "red")
 lines(t, type = "l", col = "red")
 lines(ts(sea, start =c(2022,1), frequency = 10), type = "l", col="green")
-lines(ts(tr, start =c(2022,1), frequency = 10), type = "l", col="green")
+lines(ts(tr2, start =c(2022,1), frequency = 10), type = "l", col="green")
 # legend("bottomright",legend=c("true","loess", "stlplus"), lty=1,
 #        col=c("green","red", "blue"))
 
 ```
 
-#Remark:
-```{r, echo=TRUE}
-mean(sqrt((s - sea)^2))
-mean(sqrt((dstlp$data[,"seasonal"] - sea)^2))
 
 
-mean(sqrt((t - tr)^2))
-mean(sqrt((dstlp$data[,"trend"] - tr)^2))
+```{r}
+acf(ts1409, na.action = na.exclude, lag.max = length(ts1409))
+# acf(stlp1409$data[,"trend"] + stlp1409$data[,"remainder"], na.action = na.exclude, lag.max = 1000)
+# acf(ts1409 - seasonal(ts1409, window = 60*38), na.action = na.exclude, lag.max = 1000)
 
-
-mean(sqrt((s+t - (sea+tr))^2))
-mean(sqrt((dstlp$data[,"seasonal"]+ dstlp$data[,"trend"] - (sea+tr))^2))
-```
-
-
-```{r, echo=TRUE, warning=FALSE}
-spans = seq(from=0.05, to=1, by=0.01)
-vars = lapply(spans, FUN=function(x) {variation(Xt, x)})
-sv = sapply(vars, FUN=function(x){x$sv})
-tv = sapply(vars, FUN=function(x){x$tv})
-rv = sapply(vars, FUN=function(x){x$rv})
-# s_spans = sapply(vars, FUN=function(x){x$s.span})
-
+acf(difference(ts1409, order=1), na.action = na.exclude, lag.max = 200)
 ```
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+#======================================================================================
+# jasmine's code
+```{r include = TRUE}
+
+
+
+#acf_original <- acf(as.numeric(dat_obj$Xt))
+acf_original <- acf(as.numeric(Xt))  ## if we know that the error looks like 
+#par(mfrow = c(1,1))
+#acf(as.numeric(Xt))
+
+bws <- seq(0.1,1,0.05)
+acf_select <- rep(NA, length(bws))
+i <- 1; type <- "K-fold"
+par(mfrow = c(1,2))
+for(bw in bws){
+  trend_obj <- extract.trend(Xt,  type  = type, trend_bw = bw)
+  x_trend <- trend_obj$x_trend
+  x_remainder <- Xt - x_trend 
+  plot(ts(x_trend, start = start_time, frequency = ndays), type = "l",main = bw)
+  lines(ts(tr2, start = start_time, frequency = ndays),  col = "red")
+  acf_obj <- acf(as.numeric(x_remainder))
+  acf_select[i] <- sum( ((as.numeric(unlist(acf_obj)))[1:4] -(as.numeric(unlist(acf_original)))[1:4])^2)
+  i <- i+1
+}
+```
+
+
 ```{r, echo=TRUE}
-plot(x = spans, y = sv, type = "b",  main = "variation", col = "green")
-lines(x = spans, y = tv, type = "b", col = "blue")
-lines(x = spans, y = rv, type = "b", col = "red")
-legend("topright",legend=c("seasonal","trend", "remainder"), lty=1,
-       col=c("green","blue", "red"))
+## try to mimic what stl_plus is doing ... 
+cycle_indices <- rep(rep(1:ndays), nyears)
+cs1 <- cs2 <- rep(1:ndays) # head and tail 
+n.p <- ndays
+c_tilde <- rep(NA, n)
+for(i in 1:ndays){
+  idx <- which(cycle_indices== i)
+  c_tilde[idx] <- mean(Xt[which(cycle_indices==i)])
+}
+plot(c_tilde)
+ma <- function(x, n = 5){filter(x, rep(1 / n, n), sides = 2)}
+c_tilde_ma <- ma(c_tilde, n.p) # this is a constant 
+L <- c_tilde_ma
+seasonal <- c_tilde - L   # not smooth; just the average of days per year   
+D <- as.numeric(Xt) - seasonal # this is trend 
+
+# smooth the trend to ignore things < 20 per days .... 
+# Let's try to code Jason's method 
+
+init.trend <- function(x, ndays, nyears){
+  
+  x_sub <- matrix(x, ncol = ndays)
+  seasonal_med <- apply(x_sub, 2, median)
+  #trend_rough <- ma(x-rep(seasonal_med, nyears), ndays)
+  tmp <- as.numeric(x-rep(seasonal_med, nyears))
+  time_pt <- 1:length(x)  
+  trend_init <- loess(tmp~time_pt, family = "symmetric") # might be a little oversmoothed... so seasonal may have short term, but should be 
+  #okay since the short term differ in years, and likely not be picked up by the next seasonal smoothing 
+  return(predict(trend_init, time_pt))
+}
+
+
+cv.seasonal <- function(x_sub, candidate_bw){  
+  
+  time_pt <- 1:ncol(x_sub)  
+  cv_err <- 0
+  for(i in 1:nrow(x_sub)){
+    tmp <- as.numeric(x_sub[-i,])
+    loess_obj <- loess(tmp~rep(time_pt, nrow(x_sub)-1), span =  candidate_bw,  family = "symmetric")
+    
+    cv_err <- cv_err + sum( (x_sub[i,] - predict(loess_obj, time_pt))^2)
+  }
+  cv_err  <- cv_err/nrow(x_sub) # average prediction error per year	
+  return(cv_err)
+}
+
+fit.seasonal <- function(x_sub, bw){
+  
+  time_pt <- 1:ncol(x_sub)  
+  tmp <- as.numeric(x_sub)
+  loess_obj <- loess(tmp~rep(time_pt, nrow(x_sub)), span =  bw,  family = "symmetric") 
+  fitted <- predict(loess_obj, time_pt)
+
+}
+
+# if bw too large, trend flat; else trend rough 
+decompose_trend_remainder <- function(x_trend_remainder, bw){
+  
+  time_pt <- 1:length(x_trend_remainder)  
+  tmp <- as.numeric(x_trend_remainder)
+  loess_obj <- loess(tmp~time_pt, span =  bw,  family = "symmetric") 
+  fitted_trend <- predict(loess_obj, time_pt)
+  return(list(fitted_trend = fitted_trend, fitted_remainder = x_trend_remainder - fitted_trend))
+  
+}
+
+
+perform.decompose  <- function(x, ndays, nyears, niter){
+  
+  x_detrend <- x - init.trend(x, ndays, nyears) # first detrend
+  
+  for(i in 1:niter){
+    
+    x_sub <- matrix(x_detrend, ncol = ndays)
+    opt_bw <- optim(par = 0.5, fn = function(candidate_bw){cv.seasonal(x_sub, candidate_bw)}, lower = 0.01, upper = 1, method = "Brent") 
+    x_seasonal <- fit.seasonal(x_sub, opt_bw$par)
+    x_seasonal_rep <- rep(x_seasonal, nyears)
+    x_trend_remainder <- x - x_seasonal_rep
+    
+    par(mfrow = c(3,2))
+    
+    par(mfrow = c(1,1))
+    
+    for(bw in c(0.1, 0.5, 2)){
+      
+      tmp <- decompose_trend_remainder(x_trend_remainder, bw)
+      plot(tmp$fitted_trend, main = var(tmp$fitted_trend), ylab = "fitted trend")
+      plot(tmp$fitted_remainder, main = var(tmp$fitted_remainder), ylab = "fitted residual")
+      
+    }
+    
+    
+    #library("funtimes")
+    time_points <- 1:(ndays* nyears) 
+    tmpp <- loess(tmp$fitted_remainder~time_points,  family = "symmetric")   # not super smooth but should be good enough .. 
+    tmpp <- predict(tmpp, time_points)
+    plot(tmp$fitted_trend)
+    plot(tmpp)
+    
+    plot(abs(tmp$fitted_trend))
+    plot(abs(tmpp))
+    
+    
+    aa <- quantile(abs(tmp$fitted_trend), seq(0,1,0.1))
+    bb <- quantile(abs(tmpp), seq(0,1,0.1))
+    plot(bb~aa)
+    abline(a = 0, b = 1, col = "red")
+    
+    
+    t.test(abs(tmpp))
+    
+    tmpp <- tmpp[1:200]
+    time_points1 <- 1:length(tmpp)
+    
+    wavk_test(tmpp ~ time_points1, factor.length = "adaptive.selection")
+    
+    tmpp  <- 0.5*time_points1 + rnorm(length(tmpp))
+    wavk_test(tmpp ~ time_points1 + time_points1^2, factor.length = "adaptive.selection")
+    
+    
+    
+    var_bw <- NULL; var_remainder <- NULL
+    mse_tr <-var_tr <- bias_tr <- NULL
+    for(bw in seq(0.1,5,0.1)){
+      tmp <- decompose_trend_remainder(x_trend_remainder, bw)
+      var_bw <- c(var_bw, var(tmp$fitted_trend))
+      mse_tr <- c(mse_tr, mean((tmp$fitted_trend -x_trend_remainder)^2))
+      var_tr <- c(var_tr, var(tmp$fitted_trend -x_trend_remainder))
+      bias_tr <- c(bias_tr, mean(tmp$fitted_trend -x_trend_remainder)^2)
+      var_remainder <- c(var_remainder, mean( (tmp$fitted_remainder)^2))
+    }
+    
+    
+    #plot(seq(0.1,5,0.1),mse_tr)
+    #plot(seq(0.1,5,0.1),bias_tr)
+    
+    
+    par(mfrow = c(1,2))
+    plot(seq(0.1,5,0.1),var_bw)
+    plot(seq(0.1,5,0.1),var_remainder)
+    
+    #plot(var_bw+ var_remainder)
+  }
+  
+}  
+```
+
+
+
+
+
+
+
+
+
+
+
+# DFT-IDFT to de-noise
+```{r}
+load(file = "D:/NSERC/project/1409 5-day avg.RData")
+
+fivedaily = log(fivedaily_df$resp)
+
+```
+
+
+```{r}
+
+s5 = seasonal(fivedaily, deg=2, window=38*12)
+t5 = trend(fivedaily-s5, deg = 2, window = 0.1*length(fivedaily))
+r5 = fivedaily - s5 - t5
+acf(r5, lag.max = 500, na.action = na.exclude)
+pacf(r5, na.action = na.exclude)
+
+plot(fivedaily, col="green", ylim=c(-5,5))
+lines(s5, col = "red")
+lines(t5, col = "blue")
+
+
+plot(fivedaily-s5, col = "green")
+lines(t5, col = "blue")
+
+```
+
+
+```{r}
+plot(r5)
+model = arima(r5, order = c(3,0,0))
+tsdiag(model)
+auto.arima(r5)
+
+```
+
+
+
+```{r}
+ft = fft(as.vector(fivedaily-s5)[1:1200], inverse = FALSE)
+
+ft[9:(1200-9+2)] = 0+0i
+plot((fivedaily-s5)[1:1200], col = "green")
+lines(Re(fft(ft, inverse = TRUE)/1200), col = "blue")
+```
+
+
+
+```{r}
+ft_s = fft(as.vector(s5)[1:1200], inverse = FALSE)
+# ft_s[104:(1200-104+2)] = 0+0i
+
+plot(as.vector(s5)[1:1200], type = "l", col = "blue")
+lines(Re(fft(ft_s, inverse = TRUE)/1200), col= "red")
+```
+
+
+
+```{r}
+plot(Re(ft)[1:600], type = "l", col = "blue")
+plot(Re(ft_s)[1:600],type = "l", col = "blue")
+# lines(abs(ft_s), col = "red")
+
+```
+
+
+
+```{r}
+ft_sim = fft(as.vector(Xt), inverse = FALSE)
+q = 5
+ft_sim[q:(3650-q+2)] = 0+0i
+plot(as.vector(Xt), col = "green", main = "res with ARMA(1,2), critfreq = 3")
+lines(Re(fft(ft_sim, inverse = TRUE)/3650), type = "b", col = "blue")
+lines(as.vector(tr), type = "b", col = "red")
+lines(as.vector(trend(Xt, deg = 2, window = 0.3 * n)), type = "b", col = "black")
+legend("bottomright",legend=c("data","true", "DFT", "loess"), lty=1,
+       col=c("green","red", "blue", "black"))
+
+```
+
+
+
+```{r}
+save.image(file = "simulation.RData")
 
 ```

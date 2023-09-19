@@ -57,7 +57,7 @@ plot(stlp1349)
 
 # seasonality
 ```{r, echo=TRUE}
-decomp1349 = decompose.loess(ts1349)
+decomp1349 = decompose(ts1349)
 ```
 
 
